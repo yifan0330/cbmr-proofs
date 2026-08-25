@@ -1,8 +1,8 @@
 """Clustered Negative Binomial: the observed information, in one pass.
 
-Cheaper to close than the negative binomial case. With the nuisance parameters held fixed,
-every special function in this likelihood depends only on the counts and the precision, so the
-whole composite Hessian differentiates and simplifies without decomposition.
+Cheaper to close than the negative binomial case. With the nuisance parameters held fixed, every
+special function in this likelihood depends only on the counts and the precision, so the whole
+composite Hessian differentiates and simplifies without decomposition.
 
 This is also the only one of the three whose second differential in the log-intensity is not
 diagonal: the spatial coefficients enter through the scalar E = sum_v u_v, giving a diagonal

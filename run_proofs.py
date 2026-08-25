@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""Run every proof, emit its LaTeX fragment, and exit nonzero if any claim fails.
+"""Run every proof, write its LaTeX fragment, and exit nonzero if any claim fails.
 
-This is the whole contract of the repository: the papers in ``docs/`` are only as good as this
+This is the contract of the repository. The papers in ``docs/`` are only as good as this
 script's exit code, and CI runs it on every push.
 """
 import sys

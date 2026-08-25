@@ -1,0 +1,36 @@
+\begin{table}[htbp]
+\centering
+\caption{Design coverage. ``patterns'' is $P$ and ``$\max|\supp(p)|$'' the largest number of
+spatial columns any one pattern loads on --- greater than one exactly when the loadings are not
+one-hot. ``blocks'' is the number of components of Proposition~\ref{prop:blocks}; ``rung'' is
+which strategy of Section~\ref{sec:ladder} that buys. ``disagreement'' is the largest relative
+difference between the closed-form Hessian and \texttt{torch.func.hessian}, over the
+distributions that accept the design. Every row was checked for all three distributions except
+where noted.}
+\label{tab:designs}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrlr}
+\toprule
+design & formula & $P$ & $\max|\supp(p)|$ & blocks & rung & disagreement \\
+\midrule
+cell-means factor & \texttt{\textasciitilde\ s(a)} & $4$ & $1$ & $4$ & blockwise & $2.7\times10^{-15}$\\
+full interaction & \texttt{\textasciitilde\ s(a:b)} & $8$ & $1$ & $8$ & blockwise & $2.7\times10^{-15}$\\
+additive main effects & \texttt{\textasciitilde\ sz(a) + sz(b)} & $8$ & $5$ & $1$ & Cholesky & $5.0\times10^{-16}$\\
+main effects $+$ interaction & \texttt{\textasciitilde\ sz(a) + sz(b) + sz(a:b)} & $8$ & $12$ & $1$ & dense$^{\dagger}$ & $4.6\times10^{-16}$\\
+one global moderator & \texttt{\textasciitilde\ s(a) + x} & $4$ & $1$ & $1$ & bordered & $2.2\times10^{-14}$\\
+global moderator interaction & \texttt{\textasciitilde\ s(a) + x * z} & $4$ & $1$ & $1$ & bordered & $9.2\times10^{-14}$\\
+voxelwise moderator, continuous & \texttt{\textasciitilde\ s(a) + s(x)} & $96$ & $2$ & $1$ & Cholesky & $2.3\times10^{-16\,\ddagger}$\\
+voxelwise moderator, coarse & \texttt{\textasciitilde\ s(a) + s(w)} & $12$ & $2$ & $1$ & Cholesky & $4.1\times10^{-16}$\\
+everything at once & \texttt{\textasciitilde\ sz(a) + sz(b) + s(w) + x * z} & $24$ & $6$ & $1$ & Cholesky & $1.2\times10^{-14}$\\
+\bottomrule
+\end{tabular}}
+
+\vspace{2pt}
+\raggedright\footnotesize
+$^{\dagger}$ Rank deficient at this sample size (condition number $4\times10^{20}$), so the
+Cholesky declines and the ladder falls through to the general inverse. The guard working, not a
+gap.\\
+$^{\ddagger}$ Poisson only: NiMARE's \texttt{check\_design} refuses the overdispersed
+distributions when a continuous spatial covariate leaves every pattern with one experiment. The
+same term with a coarse covariate (previous row) is accepted by all three.
+\end{table}

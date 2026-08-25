@@ -1,0 +1,19 @@
+name: proofs
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      # The whole contract of this repository: every residual must be exactly zero.
+      - run: python run_proofs.py
+      - name: check the generated fragments are current
+        run: git diff --exit-code docs/generated

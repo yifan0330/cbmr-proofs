@@ -1,0 +1,664 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{microtype}
+\usepackage{graphicx}
+\emergencystretch=4em
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}[proposition]{Lemma}
+\newtheorem{corollary}[proposition]{Corollary}
+\theoremstyle{definition}
+\newtheorem{remark}[proposition]{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathcal{I}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\spec}{\operatorname{spec}}
+\newcommand{\supp}{\operatorname{supp}}
+\newcommand{\vecop}{\operatorname{vec}}
+\newcommand{\cond}{\kappa}
+
+\title{Closed-Form Observed Information for Coordinate-Based Meta-Regression}
+\author{Derivations, equivalence proofs, and the structure of the covariance step}
+\date{25 August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+NiMARE's coordinate-based meta-regression (CBMR) computes regression standard errors by
+differentiating the log-likelihood twice with \texttt{torch.func.hessian}. Forward-over-reverse
+mode pushes every tangent through the likelihood at once, so the intermediate has shape
+$(\text{parameters} \times \text{patterns} \times \text{voxels})$; at $7{,}329$ coefficients,
+$21$ patterns and $8{,}444$ voxels that is $9.7$~GB, which is an out-of-memory failure rather
+than a slow fit.
+
+We derive the observed information in closed form for all three of NiMARE's observation
+distributions, prove each derivation equivalent to the autodiff Hessian, and characterise the
+sparsity the design induces in it. A single lemma covers all three: the second differential of
+the log-likelihood with respect to the log-intensity is either diagonal in the voxels (Poisson,
+Negative Binomial) or diagonal-plus-rank-one (Clustered Negative Binomial), and the chain rule
+through the log-bilinear predictor turns each into $n_{\text{patterns}}$ symmetric rank-updates
+of width $n_{\text{bases}}$. No parameter-sized intermediate is ever formed. We then separate
+two questions that are easily conflated: which \emph{likelihood} admits a closed-form Hessian
+(all three), and which \emph{designs} make that Hessian block diagonal (a strictly narrower
+class), and we give the generalisations that recover the fast covariance step outside it.
+\end{abstract}
+
+\tableofcontents
+
+\section{Setting and notation}
+
+\subsection{The pattern representation}
+
+CBMR models the foci of $n$ experiments over $V$ voxels as a point process whose log-intensity
+is bilinear in a spatial spline basis and an experiment-level design. Write
+
+\begin{itemize}
+  \item $B \in \R^{V \times K}$ for the spline basis, $b_v^\top$ its $v$-th row;
+  \item $L \in \R^{P \times C}$ for the \emph{loadings}: the distinct rows of the experiment-level
+        blocks of every spatial term, stacked. $P$ is the number of distinct spatial loadings
+        (``patterns''), $C$ the number of spatial columns;
+  \item $\pi : \{1,\dots,n\} \to \{1,\dots,P\}$ for the pattern of each experiment, and
+        $\E_p = \pi^{-1}(p)$;
+  \item $\beta \in \R^{C \times K}$ for the spatial coefficients;
+  \item $G \in \R^{n \times Q}$ for the non-spatial (``global'') design block and
+        $\gamma \in \R^{Q}$ for its coefficients.
+\end{itemize}
+
+The log-intensity of pattern $p$ at voxel $v$, and the scalar moderator effect of experiment
+$i$, are
+\begin{equation}\label{eq:predictor}
+  S_{pv} \;=\; \sum_{c=1}^{C} L_{pc} \sum_{k=1}^{K} \beta_{ck} B_{vk},
+  \qquad
+  m_i \;=\; \sum_{q=1}^{Q} G_{iq}\gamma_q ,
+\end{equation}
+so that $S = (L\beta)B^\top$ and $m = G\gamma$. We write $u_{pv} = e^{S_{pv}}$ and
+$e_i = e^{m_i}$ throughout. Foci counts are $y_{iv}$, with pattern marginals and experiment
+totals
+\begin{equation}
+  Y_{pv} \;=\; \sum_{i \in \E_p} y_{iv},
+  \qquad
+  y_{i\cdot} \;=\; \sum_{v=1}^{V} y_{iv}.
+\end{equation}
+
+The parameter vector is $\phi = (\vecop(\beta), \gamma) \in \R^{CK + Q}$, with $\beta$ flattened
+row-major so that $\beta_{ck}$ occupies index $cK + k$. Overdispersion parameters $\theta_p$,
+where the distribution has them, are held fixed at their fitted values --- this is what
+\texttt{CBMRModel.information\_matrix} does, and it is what CBMR has always reported regression
+standard errors from. Every derivation below is therefore a differentiation in $\phi$ only,
+with $\theta$ a constant.
+
+\subsection{The two facts the whole paper rests on}
+
+Both parts of \eqref{eq:predictor} are \emph{linear} in the parameters. Hence
+\begin{equation}\label{eq:linear}
+  \frac{\partial S_{pv}}{\partial \beta_{ck}} = L_{pc} B_{vk},
+  \qquad
+  \frac{\partial^2 S_{pv}}{\partial \beta_{ck}\,\partial \beta_{c'k'}} = 0,
+  \qquad
+  \frac{\partial m_i}{\partial \gamma_q} = G_{iq},
+  \qquad
+  \frac{\partial^2 m_i}{\partial \gamma_q\,\partial \gamma_{q'}} = 0 .
+\end{equation}
+The second derivatives vanish identically. Everything that follows is the chain rule applied to
+this fact, so the only distribution-specific work is the second differential of the
+log-likelihood with respect to $(S, \gamma)$.
+
+\section{A master lemma}
+
+Every CBMR log-likelihood in NiMARE decomposes over patterns,
+\begin{equation}\label{eq:decomposition}
+  -\log \mathcal{L}(\phi) \;=\; \sum_{p=1}^{P} f_p\bigl(S_{p\cdot},\, \gamma\bigr) ,
+\end{equation}
+because experiments sharing a pattern share a log-intensity map, and no term couples two
+patterns. This is the representation \texttt{predictor.py} is built on.
+
+\begin{lemma}[Chain rule through a log-bilinear predictor]\label{lem:master}
+Let $F(\phi) = \sum_p f_p(S_{p\cdot}, \gamma)$ with $S$ as in \eqref{eq:predictor} and each $f_p$
+twice differentiable. Write
+\[
+  \bigl(\Sigma_p\bigr)_{vv'} = \frac{\partial^2 f_p}{\partial S_{pv} \partial S_{pv'}},
+  \qquad
+  \bigl(\tau_p\bigr)_{vq} = \frac{\partial^2 f_p}{\partial S_{pv} \partial \gamma_q},
+  \qquad
+  \bigl(\Xi_p\bigr)_{qq'} = \frac{\partial^2 f_p}{\partial \gamma_q \partial \gamma_{q'}} .
+\]
+Then the Hessian of $F$ has blocks
+\begin{align}
+  \frac{\partial^2 F}{\partial \beta_{ck}\,\partial \beta_{c'k'}}
+    &= \sum_{p=1}^{P} L_{pc} L_{pc'} \, \bigl(B^\top \Sigma_p B\bigr)_{kk'},
+      \label{eq:master-bb}\\
+  \frac{\partial^2 F}{\partial \beta_{ck}\,\partial \gamma_q}
+    &= \sum_{p=1}^{P} L_{pc} \, \bigl(B^\top \tau_p\bigr)_{kq},
+      \label{eq:master-bg}\\
+  \frac{\partial^2 F}{\partial \gamma_q\,\partial \gamma_{q'}}
+    &= \sum_{p=1}^{P} \bigl(\Xi_p\bigr)_{qq'} .
+      \label{eq:master-gg}
+\end{align}
+\end{lemma}
+
+\begin{proof}
+By \eqref{eq:linear}, $\partial S_{pv}/\partial\beta_{ck} = L_{pc}B_{vk}$ and the second
+derivative of $S$ vanishes, so the chain rule for a composition with an affine map contributes
+no curvature term:
+\[
+  \frac{\partial^2 f_p}{\partial \beta_{ck} \partial \beta_{c'k'}}
+  = \sum_{v,v'} \frac{\partial^2 f_p}{\partial S_{pv}\partial S_{pv'}}
+      \frac{\partial S_{pv}}{\partial\beta_{ck}} \frac{\partial S_{pv'}}{\partial\beta_{c'k'}}
+  = L_{pc}L_{pc'} \sum_{v,v'} (\Sigma_p)_{vv'} B_{vk}B_{v'k'} ,
+\]
+which is \eqref{eq:master-bb}. The same argument with one factor replaced by
+$\partial \gamma_q/\partial\gamma_q = 1$ gives \eqref{eq:master-bg}, and with both replaced,
+\eqref{eq:master-gg}. Summing over $p$ completes the proof.
+\end{proof}
+
+Lemma~\ref{lem:master} reduces each distribution to a single question: \emph{what is $\Sigma_p$?}
+The answer determines the cost. If $\Sigma_p = \diag(w_p)$ then
+$B^\top \Sigma_p B = B^\top \diag(w_p) B$ costs $O(VK^2)$ and allocates one $V \times K$
+temporary. If $\Sigma_p$ is diagonal plus rank one, one extra outer product of a
+$K$-vector is added. In neither case is anything of size $CK$ formed.
+
+\begin{remark}
+This is exactly what forward-over-reverse autodiff fails to exploit. \texttt{jacfwd} carries one
+tangent per parameter through the evaluation, materialising an array of shape $(CK, P, V)$,
+because it cannot know that the map $\beta \mapsto S$ is affine with a rank structure that
+collapses the parameter axis.
+\end{remark}
+
+\section{Poisson}
+
+\subsection{The likelihood}
+
+Dropping the parameter-free $-\sum \log y!$, NiMARE's Poisson log-likelihood on marginals is
+\begin{equation}\label{eq:poisson-ll}
+  \log\mathcal{L} \;=\; \sum_{p}\sum_{v} Y_{pv} S_{pv}
+  \;+\; \sum_{i} y_{i\cdot}\, m_i
+  \;-\; \sum_{p} \Bigl(\sum_v u_{pv}\Bigr) T_p,
+  \qquad T_p = \sum_{i \in \E_p} e_i .
+\end{equation}
+
+\begin{proposition}[Poisson observed information]\label{prop:poisson}
+With $U_{pq} = \sum_{i\in\E_p} e_i G_{iq}$, $a_{pk} = \sum_v u_{pv}B_{vk}$ and
+$E_p = \sum_v u_{pv}$, the Hessian of $-\log\mathcal{L}$ is
+\begin{align}
+  H_{(ck),(c'k')} &= \sum_p L_{pc}L_{pc'} \bigl(B^\top \diag(T_p u_{p\cdot}) B\bigr)_{kk'},\\
+  H_{(ck),q} &= \sum_p L_{pc}\, a_{pk} U_{pq},\\
+  H_{q,q'} &= \sum_i e_i E_{\pi(i)} G_{iq}G_{iq'} .
+\end{align}
+In particular $H$ does not depend on the foci.
+\end{proposition}
+
+\begin{proof}
+Write \eqref{eq:poisson-ll} in the form \eqref{eq:decomposition} with
+$f_p = -\sum_v Y_{pv}S_{pv} - \sum_{i\in\E_p} y_{i\cdot}m_i + E_p(S_{p\cdot})\,T_p(\gamma)$.
+The first two terms are linear in $\phi$ and so contribute nothing to any second derivative;
+this is the whole of the data dependence, which proves the final claim. For the remainder,
+$\partial E_p/\partial S_{pv} = u_{pv}$ and $\partial^2 E_p/\partial S_{pv}\partial S_{pv'} =
+u_{pv}\delta_{vv'}$, while $\partial T_p/\partial\gamma_q = U_{pq}$ and
+$\partial^2 T_p / \partial\gamma_q\partial\gamma_{q'} = \sum_{i\in\E_p} e_i G_{iq}G_{iq'}$.
+Hence $\Sigma_p = T_p \diag(u_{p\cdot})$, $(\tau_p)_{vq} = u_{pv}U_{pq}$ and
+$(\Xi_p)_{qq'} = E_p \sum_{i \in \E_p} e_iG_{iq}G_{iq'}$. Substituting into
+Lemma~\ref{lem:master} and collecting the $\gamma\gamma$ sum over experiments gives the three
+displays.
+\end{proof}
+
+\begin{remark}
+The foci-independence is the log link's canonical-parameter property: for a GLM with canonical
+link the observed and expected information coincide. It is a useful test of an implementation,
+since a Poisson Hessian that responds to the data is wrong; the test suite checks this.
+\end{remark}
+
+\section{Negative Binomial}
+
+\subsection{Reparameterisation}
+
+NiMARE's negative binomial is a moment-matched approximation to the sum, over the experiments of
+a pattern, of negative binomial variables. With overdispersion $\theta_p$ and
+\begin{equation}
+  s_{1} = \sum_{i\in\E_p} e_i, \qquad s_{2} = \sum_{i\in\E_p} e_i^2 ,
+\end{equation}
+it uses shape $r = s_1^2/(\theta_p s_2)$ and success probability
+$\pi_v = \bigl(1 + s_1/(\theta_p u_{pv} s_2)\bigr)^{-1}$. The derivation becomes tractable under
+the change of variables
+\begin{equation}\label{eq:nb-RA}
+  A_p \;=\; \frac{s_1}{\theta_p s_2}, \qquad R_p \;=\; \frac{s_1^2}{\theta_p s_2} \;=\; s_1 A_p ,
+\end{equation}
+which gives $\pi_v = u_{pv}/(u_{pv}+A_p)$ and $1-\pi_v = A_p/(u_{pv}+A_p)$.
+
+\begin{lemma}\label{lem:nb-psi}
+Up to an additive constant depending only on the data,
+\begin{equation}\label{eq:psi}
+\begin{split}
+  f_p \;=\; \Psi(R_p, A_p, S_{p\cdot}) \;=\;{}& -\sum_v \log\Gamma(Y_{pv}+R_p)
+     + V\log\Gamma(R_p) - VR_p\log A_p\\
+     &{}+ \sum_v (R_p+Y_{pv})\log(u_{pv}+A_p) - \sum_v Y_{pv}S_{pv}.
+\end{split}
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+Substituting $\log(1-\pi_v) = \log A_p - \log(u_{pv}+A_p)$ and
+$\log \pi_v = S_{pv} - \log(u_{pv}+A_p)$ into NiMARE's summand
+$\log\Gamma(Y+r) - \log\Gamma(Y+1) - \log\Gamma(r) + r\log(1-\pi) + Y\log\pi$ and negating gives
+\eqref{eq:psi} plus $\sum_v \log\Gamma(Y_{pv}+1)$, which is free of $\phi$.
+\end{proof}
+
+The value of \eqref{eq:psi} is that it separates the three ways the parameters enter: the special
+functions see only $R_p$, the voxels only $S_{p\cdot}$, and the moderators only $(R_p, A_p)$.
+
+\begin{proposition}[Negative binomial observed information]\label{prop:nb}
+Write $d_{pv} = u_{pv}+A_p$. Then
+\begin{equation}\label{eq:nb-sigma}
+  \Sigma_p = \diag(w_{p\cdot}), \qquad
+  w_{pv} \;=\; \frac{(R_p + Y_{pv})\, u_{pv} A_p}{d_{pv}^{2}} ,
+\end{equation}
+and, with $\partial_R := \partial \Psi/\partial R$ etc.,
+\begin{align}
+  \frac{\partial^2 \Psi}{\partial S_{pv}\partial R_p} = \frac{u_{pv}}{d_{pv}},
+  &\qquad
+  \frac{\partial^2 \Psi}{\partial S_{pv}\partial A_p} = -\frac{(R_p+Y_{pv})u_{pv}}{d_{pv}^{2}},
+    \label{eq:nb-cross}\\
+  \Psi_{RR} = -\sum_v \psi_1(Y_{pv}+R_p) + V\psi_1(R_p),
+  &\qquad
+  \Psi_{RA} = -\frac{V}{A_p} + \sum_v \frac{1}{d_{pv}},\notag\\
+  \Psi_{AA} = \frac{VR_p}{A_p^2} - \sum_v \frac{R_p+Y_{pv}}{d_{pv}^{2}}.&
+    \label{eq:nb-second}
+\end{align}
+where $\psi_1$ is the trigamma function. The $\beta\gamma$ and $\gamma\gamma$ blocks follow by
+the chain rule through $R_p(\gamma), A_p(\gamma)$:
+\begin{align}
+  \frac{\partial^2 f_p}{\partial \beta_{ck}\partial\gamma_q}
+   &= L_{pc}\Bigl[\bigl(B^\top \tfrac{u_{p\cdot}}{d_{p\cdot}}\bigr)_k \partial_q R_p
+      - \bigl(B^\top \tfrac{(R_p+Y_{p\cdot})u_{p\cdot}}{d_{p\cdot}^2}\bigr)_k \partial_q A_p
+      \Bigr], \label{eq:nb-bg}\\
+  \frac{\partial^2 f_p}{\partial \gamma_q\partial\gamma_{q'}}
+   &= \Psi_{RR}\,\partial_q R_p\, \partial_{q'} R_p
+    + \Psi_{RA}\bigl(\partial_q R_p\, \partial_{q'} A_p + \partial_{q'} R_p\, \partial_q A_p\bigr)
+    + \Psi_{AA}\, \partial_q A_p\, \partial_{q'} A_p\notag\\
+   &\qquad{}+ \Psi_{R}\, \partial^2_{qq'} R_p + \Psi_{A}\, \partial^2_{qq'} A_p.
+    \label{eq:nb-gg}
+\end{align}
+\end{proposition}
+
+\begin{proof}
+Differentiate \eqref{eq:psi} in $S_{pv}$, using $\partial u_{pv}/\partial S_{pv} = u_{pv}$:
+\[
+  \frac{\partial \Psi}{\partial S_{pv}} = \frac{(R_p+Y_{pv})u_{pv}}{d_{pv}} - Y_{pv},
+\]
+\[
+  \frac{\partial^2 \Psi}{\partial S_{pv}\partial S_{pv'}}
+    = (R_p+Y_{pv})\,\frac{u_{pv}(u_{pv}+A_p) - u_{pv}^2}{d_{pv}^2}\,\delta_{vv'}
+    = \frac{(R_p+Y_{pv})\,u_{pv}A_p}{d_{pv}^2}\,\delta_{vv'},
+\]
+which is \eqref{eq:nb-sigma}; the Kronecker delta appears because \eqref{eq:psi} is a sum of
+per-voxel terms. Differentiating $\partial\Psi/\partial S_{pv}$ in $R_p$ and in $A_p$ gives
+\eqref{eq:nb-cross}, and differentiating $\Psi_R, \Psi_A$ gives \eqref{eq:nb-second}. Since
+$\gamma$ enters $\Psi$ only through the pair $(R_p, A_p)$, the multivariate chain rule for a
+composition $\gamma \mapsto (R,A) \mapsto \Psi$ yields \eqref{eq:nb-bg} and \eqref{eq:nb-gg}, the
+last two terms of \eqref{eq:nb-gg} being the curvature of the inner map.
+\end{proof}
+
+\begin{lemma}[Derivatives of the reparameterisation]\label{lem:nb-RA-derivs}
+Let $U_q = \sum_{i\in\E_p} e_iG_{iq}$, $W_q = \sum_{i\in\E_p} e_i^2G_{iq}$,
+$U^{(2)}_{qq'} = \sum_{i\in\E_p} e_iG_{iq}G_{iq'}$,
+$W^{(2)}_{qq'} = \sum_{i\in\E_p} e_i^2G_{iq}G_{iq'}$, and
+\[
+  \ell_q = \frac{U_q}{s_1},\quad
+  h_q = \frac{2W_q}{s_2},\quad
+  \ell^{(2)}_{qq'} = \frac{U^{(2)}_{qq'}}{s_1} - \frac{U_qU_{q'}}{s_1^2},\quad
+  h^{(2)}_{qq'} = \frac{4W^{(2)}_{qq'}}{s_2} - \frac{4W_qW_{q'}}{s_2^2} .
+\]
+Then, with $\delta^A_q = \ell_q - h_q$ and $\delta^R_q = 2\ell_q - h_q$,
+\[
+  \partial_q A_p = A_p\,\delta^A_q, \qquad
+  \partial_q R_p = R_p\,\delta^R_q,
+\]
+\[
+  \partial^2_{qq'} A_p = A_p\bigl(\delta^A_q\delta^A_{q'} + \ell^{(2)}_{qq'} - h^{(2)}_{qq'}\bigr),
+  \qquad
+  \partial^2_{qq'} R_p = R_p\bigl(\delta^R_q\delta^R_{q'} + 2\ell^{(2)}_{qq'} - h^{(2)}_{qq'}\bigr).
+\]
+\end{lemma}
+
+\begin{proof}
+$\log A_p = \log s_1 - \log s_2 - \log\theta_p$ and $\log R_p = 2\log s_1 - \log s_2 -
+\log\theta_p$. Since $\partial_q s_1 = U_q$ and $\partial_q s_2 = 2W_q$, we get
+$\partial_q \log s_1 = \ell_q$ and $\partial_q \log s_2 = h_q$; differentiating again,
+$\partial^2_{qq'}\log s_1 = \ell^{(2)}_{qq'}$ and $\partial^2_{qq'} \log s_2 = h^{(2)}_{qq'}$
+(the factor $4$ arises because $\partial^2_{qq'} s_2 = 4W^{(2)}_{qq'}$). Finally
+$\partial_q X = X \partial_q \log X$ and
+$\partial^2_{qq'} X = X\bigl(\partial_q\log X\, \partial_{q'}\log X + \partial^2_{qq'}\log X\bigr)$
+for any positive $X$.
+\end{proof}
+
+\begin{corollary}[Poisson as a limit]
+As $\theta_p \to 0$ with $\gamma$ fixed, $A_p \to \infty$ and $R_p = s_1 A_p \to\infty$, and
+\[
+  w_{pv} = \frac{(R_p+Y_{pv})u_{pv}A_p}{(u_{pv}+A_p)^2}
+   \;\longrightarrow\; s_1 u_{pv} \;=\; T_p u_{pv},
+\]
+recovering Proposition~\ref{prop:poisson}. In particular the negative binomial weight is
+foci-dependent at any $\theta_p > 0$ and the dependence vanishes only in the Poisson limit.
+\end{corollary}
+
+\section{Clustered Negative Binomial}
+
+\subsection{The likelihood}
+
+Here the latent effect is a property of the experiment rather than of the voxel, so the spatial
+coefficients enter only through the \emph{scalar} $E_p = \sum_v u_{pv}$. With precision
+$\nu_p = 1/\theta_p$ and $n_p = |\E_p|$,
+\begin{equation}\label{eq:cnb-ll}
+\begin{split}
+  \log\mathcal{L}_p ={}& n_p \nu_p \log \nu_p - n_p\log\Gamma(\nu_p)
+   + \sum_{i\in\E_p}\log\Gamma(y_{i\cdot}+\nu_p)\\
+   &{}- \sum_{i\in\E_p}(y_{i\cdot}+\nu_p)\log\bigl(E_p e_i + \nu_p\bigr)
+   + \sum_v Y_{pv}S_{pv} + \sum_{i\in\E_p} y_{i\cdot} m_i .
+\end{split}
+\end{equation}
+
+\begin{proposition}[Clustered negative binomial observed information]\label{prop:cnb}
+Let $D_i = E_{\pi(i)} e_i + \nu_{\pi(i)}$, $a_{pk} = \sum_v u_{pv}B_{vk}$ and
+\[
+  g'_p = \sum_{i\in\E_p} \frac{(y_{i\cdot}+\nu_p)e_i}{D_i},
+  \qquad
+  g''_p = -\sum_{i\in\E_p} \frac{(y_{i\cdot}+\nu_p)e_i^2}{D_i^2} .
+\]
+Then $\Sigma_p$ is diagonal plus rank one,
+\begin{equation}\label{eq:cnb-sigma}
+  \Sigma_p \;=\; g'_p \diag(u_{p\cdot}) \;+\; g''_p\, u_{p\cdot} u_{p\cdot}^\top ,
+\end{equation}
+and consequently
+\begin{align}
+  \frac{\partial^2 f_p}{\partial\beta_{ck}\partial\beta_{c'k'}}
+   &= L_{pc}L_{pc'}\Bigl[g'_p\bigl(B^\top\diag(u_{p\cdot})B\bigr)_{kk'}
+      + g''_p\, a_{pk}a_{pk'}\Bigr],\\
+  \frac{\partial^2 f_p}{\partial\beta_{ck}\partial\gamma_q}
+   &= L_{pc}\, a_{pk}\, \sum_{i\in\E_p}\frac{(y_{i\cdot}+\nu_p)\nu_p e_i G_{iq}}{D_i^2},\\
+  \frac{\partial^2 f_p}{\partial\gamma_q\partial\gamma_{q'}}
+   &= \sum_{i\in\E_p}\frac{(y_{i\cdot}+\nu_p)\nu_p E_p e_i}{D_i^2}\,G_{iq}G_{iq'} .
+\end{align}
+Only the experiment totals $y_{i\cdot}$ appear; the voxelwise marginals $Y_{pv}$ enter
+\eqref{eq:cnb-ll} linearly and so vanish.
+\end{proposition}
+
+\begin{proof}
+Let $\Gamma_p(E,\gamma) = \sum_{i\in\E_p}(y_{i\cdot}+\nu_p)\log(Ee_i+\nu_p)$, so that
+$f_p = \Gamma_p(E_p, \gamma)$ up to terms linear in $\phi$ and terms free of $\phi$. Since
+$\partial E_p/\partial S_{pv} = u_{pv}$ and
+$\partial^2 E_p/\partial S_{pv}\partial S_{pv'} = u_{pv}\delta_{vv'}$,
+\[
+  \frac{\partial^2 f_p}{\partial S_{pv}\partial S_{pv'}}
+   = \Gamma_p''(E_p)\,u_{pv}u_{pv'} + \Gamma_p'(E_p)\,u_{pv}\delta_{vv'} ,
+\]
+and $\Gamma_p' = g'_p$, $\Gamma_p'' = g''_p$ by direct differentiation, giving
+\eqref{eq:cnb-sigma}. Applying Lemma~\ref{lem:master} and using
+$B^\top(u u^\top)B = (B^\top u)(B^\top u)^\top = a_pa_p^\top$ gives the $\beta\beta$ block. For
+the cross block, $\partial_q \bigl[e_i/D_i\bigr] = \nu_p e_i G_{iq}/D_i^2$, whence
+$\partial_q \Gamma'_p = \sum_i (y_{i\cdot}+\nu_p)\nu_pe_iG_{iq}/D_i^2$ and the
+$\beta$-derivative contributes the factor $L_{pc}a_{pk}$. For the $\gamma\gamma$ block,
+$\partial_q \Gamma_p = \sum_i (y_{i\cdot}+\nu_p)E_pe_iG_{iq}/D_i$ and
+$\partial_{q'}\bigl[E_pe_i/D_i\bigr] = E_pe_i\nu_pG_{iq'}/D_i^2$.
+\end{proof}
+
+\begin{remark}
+Proposition~\ref{prop:cnb} is the only one of the three whose $\Sigma_p$ is not diagonal, and it
+is nonetheless the cheapest to prove: with $\nu_p$ fixed, every special function in
+\eqref{eq:cnb-ll} depends on constants alone.
+\end{remark}
+
+\section{Equivalence}
+
+Two independent checks establish that the propositions describe the same matrix NiMARE computes.
+
+\subsection{Symbolic}
+
+\texttt{scripts/symbolic\_nb.py} and \texttt{scripts/symbolic\_cnb.py} construct the likelihood
+exactly as \texttt{nimare/meta/cbmr/distributions.py} writes it, differentiate it with
+\texttt{sympy} in the primitive coefficients, subtract the claimed closed form, and simplify.
+Every residual is the symbol $0$; nothing numerical is involved, so these are proofs on a
+symbolic instance rather than evidence at a sample point.
+
+For the clustered case the whole composite Hessian closes in one pass. For the negative binomial
+the composite is intractable for \texttt{simplify}, so the proof is decomposed exactly as the
+argument above is: (i) NiMARE's summand equals $\Psi(R,A,S)$ of Lemma~\ref{lem:nb-psi}; (ii) the
+second partials of $\Psi$ are \eqref{eq:nb-sigma}--\eqref{eq:nb-second}; (iii) the derivatives of
+$R,A$ are those of Lemma~\ref{lem:nb-RA-derivs}. Composition is then
+Lemma~\ref{lem:master} together with the chain rule, which is a theorem.
+
+\begin{remark}[A subtlety worth recording]
+A first attempt verified (i) by eliminating $s_1$ from NiMARE's expression via $s_1 = A\theta s_2$
+and comparing with $\Psi$. This reports a spurious mismatch whose residual contains
+$A^2 s_2 \theta$. That quantity \emph{is} $R$: given $(s_1,s_2,\theta)$, $R$ and $A$ are not
+independent, and eliminating only one of the two relations leaves the expressions in different
+but equal forms. Substituting both definitions into $\Psi$ instead closes the identity.
+\end{remark}
+
+\subsection{Numerical}
+
+\texttt{scripts/test\_cbmr\_analytic.py} and \texttt{scripts/test\_cbmr\_designs.py} compare
+the implementations --- vectorisation, pattern assembly, loadings scatter --- against
+\texttt{CBMRModel.information\_matrix}, i.e. against \texttt{torch.func.hessian} itself.
+Table~\ref{tab:designs} reports the design coverage. Two further tests guard the structural
+claims: the Poisson Hessian must be unchanged when the foci are doubled
+(Proposition~\ref{prop:poisson}), and the other two must move, so a foci-independent
+implementation of either cannot pass silently.
+
+\section{Structure of the information matrix}
+
+\subsection{Sparsity from the design}
+
+\begin{proposition}[Column separation]\label{prop:blocks}
+Let $\supp(p) = \{c : L_{pc} \neq 0\}$ and let $\sim$ be the transitive closure of the relation
+$c \sim c' \iff \exists p:\ c,c' \in \supp(p)$. If $Q = 0$ and $c \not\sim c'$ then
+$H_{(ck),(c'k')} = 0$ for all $k,k'$. Consequently $H$ is block diagonal over the connected
+components of $\sim$, each block of size $|{\cdot}| \cdot K$.
+\end{proposition}
+
+\begin{proof}
+Immediate from \eqref{eq:master-bb}: each summand carries the factor $L_{pc}L_{pc'}$, which
+vanishes unless both $c$ and $c'$ lie in $\supp(p)$; if they do, then $c \sim c'$.
+\end{proof}
+
+Proposition~\ref{prop:blocks} holds for \emph{any} $\Sigma_p$ and hence for all three
+distributions --- and indeed for any likelihood of the form \eqref{eq:decomposition}. It is a
+statement about the design, not about the observation model. Note the entries are
+\emph{structurally} zero, not small: no rounding decision is involved.
+
+\subsection{Which designs separate}
+
+The hypothesis $Q=0$ is not cosmetic, and neither is the connectivity condition. A cell-means
+spatial factor \texttt{s(a)} assigns each pattern exactly one column, so $\sim$ is the identity
+and there are $C$ blocks; so does a full interaction \texttt{s(a:b)}. Every other construction
+the CBMR grammar admits couples the columns:
+\begin{itemize}
+  \item a sum-to-zero term \texttt{sz(a)} spans all levels in every row, so $\supp(p)$ is the
+        whole term and one component absorbs everything;
+  \item a spatial covariate \texttt{s(x)} loads alongside whatever factor accompanies it;
+  \item any global moderator makes $Q > 0$, and the cross block \eqref{eq:master-bg} is generally
+        dense, coupling every spatial column through $\gamma$.
+\end{itemize}
+Table~\ref{tab:designs} makes this concrete. The practical consequence is that the closed-form
+Hessian is general while block-diagonal inversion is not, and the two must be gated separately.
+
+\subsection{Bordered structure}\label{sec:bordered}
+
+When the spatial columns separate but $Q>0$, $H$ is not block diagonal but is \emph{bordered}
+block diagonal,
+\begin{equation}\label{eq:bordered}
+  H = \begin{pmatrix} D & C \\ C^\top & E\end{pmatrix},
+  \qquad D = \operatorname{blkdiag}(D_1,\dots,D_M) \in \R^{CK\times CK},\quad C \in \R^{CK\times Q},
+\end{equation}
+with $Q$ typically between $1$ and $5$.
+
+\begin{proposition}[Bordered inverse]\label{prop:schur}
+If $D$ and the Schur complement $\Sigma = E - C^\top D^{-1}C$ are nonsingular, then
+\begin{equation}
+  H^{-1} =
+  \begin{pmatrix}
+    D^{-1} + D^{-1}C\,\Sigma^{-1}C^\top D^{-1} & -D^{-1}C\,\Sigma^{-1}\\[2pt]
+    -\Sigma^{-1}C^\top D^{-1} & \Sigma^{-1}
+  \end{pmatrix},
+\end{equation}
+computable in $O\bigl(\sum_j |D_j|^3\bigr) + O(CKQ\cdot\max_j|D_j|) + O(Q^3)$ plus the
+$O((CK)^2Q)$ cost of forming the outer product, rather than $O((CK+Q)^3)$.
+\end{proposition}
+
+\begin{proof}
+Standard block inversion; verify by multiplying out $H H^{-1} = I$ blockwise, using
+$E - C^\top D^{-1} C = \Sigma$.
+\end{proof}
+
+Proposition~\ref{prop:schur} extends the fast \emph{inverse} to designs of the form
+``cell-means factor plus global moderators''. It does not extend the fast \emph{condition
+number}: the spectrum of \eqref{eq:bordered} is not the union of the spectra of $D$ and
+$\Sigma$, and no interlacing bound recovers the value.
+
+\section{Condition number and inversion}
+
+\texttt{CBMRModel.covariance} computes $\cond_2(H) = \sigma_{\max}/\sigma_{\min}$ with
+\texttt{np.linalg.cond}, which forms a full singular value decomposition, and then inverts with
+\texttt{np.linalg.inv}. At the $21$-group shape these cost $163$~s and $14$~s respectively, so
+the diagnostic dominates the quantity it is diagnosing. Three generalisations are available, in
+increasing order of applicability.
+
+\begin{proposition}[Block-diagonal spectrum]\label{prop:spectrum}
+If $H = \operatorname{blkdiag}(H_1,\dots,H_M)$ then
+$\spec(H) = \bigsqcup_j \spec(H_j)$ and the
+singular values are likewise the multiset union. Hence
+$\cond_2(H) = \max_j\sigma_{\max}(H_j) \big/ \min_j \sigma_{\min}(H_j)$, exactly.
+\end{proposition}
+
+\begin{proof}
+$H - \lambda I$ is block diagonal with blocks $H_j - \lambda I$, and the determinant of a block
+diagonal matrix is the product of the blocks' determinants, so the characteristic polynomial
+factorises. The same argument applied to $H^\top H$ gives the singular values.
+\end{proof}
+
+\begin{proposition}[Symmetry suffices]\label{prop:eigh}
+$H$ is symmetric by construction. For symmetric $H$ with eigenvalues $\lambda_i$, the singular
+values are $|\lambda_i|$, so $\cond_2(H) = \max_i|\lambda_i| / \min_i|\lambda_i|$ and a symmetric
+eigensolver may replace the SVD. This requires no hypothesis on the design and no positive
+definiteness.
+\end{proposition}
+
+\begin{proof}
+Write $H = V\Lambda V^\top$ with $V$ orthogonal. Then $H^\top H = V\Lambda^2V^\top$, so the
+singular values --- the nonnegative square roots of the eigenvalues of $H^\top H$ --- are
+$|\lambda_i|$.
+\end{proof}
+
+\begin{proposition}[One factorisation for both]\label{prop:chol}
+If $H \succ 0$, a single Cholesky factorisation $H = LL^\top$ serves both purposes: LAPACK's
+\texttt{pocon} returns an estimate of $\cond_1(H)$ in $O(n^2)$ from $L$, and \texttt{potri}
+returns $H^{-1}$ in $O(n^3/3)$ from the same $L$. Moreover $\cond_1$ and $\cond_2$ are equivalent
+within a factor of $n$:
+\begin{equation}\label{eq:norm-equiv}
+  n^{-1}\cond_1(H) \;\le\; \cond_2(H) \;\le\; n\,\cond_1(H).
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+The factorisation and the two LAPACK routines are standard. For \eqref{eq:norm-equiv}, from
+$n^{-1/2}\|M\|_1 \le \|M\|_2 \le n^{1/2}\|M\|_1$ applied to $M = H$ and $M = H^{-1}$,
+$\cond_2 = \|H\|_2\|H^{-1}\|_2 \le n^{1/2}\|H\|_1 \cdot n^{1/2}\|H^{-1}\|_1 = n\cond_1$, and
+symmetrically.
+\end{proof}
+
+\begin{remark}[The bound is not the behaviour]\label{rem:pocon}
+Proposition~\ref{prop:chol} is the fastest route by a wide margin, and \eqref{eq:norm-equiv}
+makes it sound harmless: a factor of $n$ is four of the sixteen decimal digits. Measured, it is
+not harmless. On the three structures of Table~\ref{tab:strategies} the \texttt{pocon} estimate
+reports $90.09$ against a true $\cond_2$ of $5.02$, $2.42\times10^{5}$ against $1657.7$, and
+$1312.4$ against $4.98$ --- discrepancies of $18\times$, $146\times$ and $264\times$. These are
+comfortably inside the bound, which is the point: the bound permits behaviour bad enough to
+make the estimate useless as a drop-in for a number the user sees. A fit at
+$\cond_2 = 10^{14}$ --- poorly conditioned but still invertible --- would be reported at
+$\sim\!10^{16}$ and trip a warning saying its standard errors cannot be trusted.
+
+The conclusion is to split the two uses of the factorisation. The Cholesky is adopted for the
+\emph{inverse}, where it agrees with \texttt{np.linalg.inv} to $1.8\times10^{-15}$ and is
+$2$--$3\times$ faster. It is rejected for the \emph{condition number}, which comes instead from
+Proposition~\ref{prop:eigh}: exact, fully general, and still $3$--$4\times$ faster than the SVD
+the stock path forms.
+\end{remark}
+
+\subsection{The ladder}\label{sec:ladder}
+
+Collecting Propositions~\ref{prop:schur}--\ref{prop:chol} into a dispatch, most specific rung
+first:
+
+\begin{enumerate}
+  \item \textbf{blockwise} --- the spatial columns separate and $Q = 0$. Condition number by
+        Proposition~\ref{prop:spectrum}, inverse blockwise. Reached only by a lone cell-means
+        factor or a lone full interaction.
+  \item \textbf{bordered} --- the spatial columns separate but $Q > 0$. Inverse by
+        Proposition~\ref{prop:schur}; the condition number cannot follow, so it falls back to
+        Proposition~\ref{prop:eigh} on the whole matrix.
+  \item \textbf{Cholesky} --- no exploitable structure, but $H \succ 0$. Condition number by
+        Proposition~\ref{prop:eigh}, inverse by Cholesky.
+  \item \textbf{dense} --- $H \not\succ 0$, so the Cholesky declines. Falls through to
+        \texttt{np.linalg.inv}, which either succeeds or raises with the diagnostic the stock
+        path would have raised.
+\end{enumerate}
+
+Every rung reports the \emph{same} condition number, to the last printed digit; none of them is
+an estimate. What varies is only how much work is done to obtain it. Structural claims are
+checked against the matrix in hand rather than assumed --- a design that ought to separate but
+whose information matrix has an entry outside the implied blocks is inverted densely, with a
+warning, rather than silently truncated.
+
+Table~\ref{tab:designs} records which rung each design reaches. The fourth is reached by exactly
+one design in the suite, \texttt{\textasciitilde\ sz(a) + sz(b) + sz(a:b)}, which is rank
+deficient at that sample size ($\cond_2 \approx 4\times10^{20}$); the Cholesky declining is the
+guard working.
+
+\section{Empirical results}
+
+\subsection{Cost of the closed forms}
+
+\input{table_scale}
+
+\subsection{Design coverage}
+
+\input{table_designs}
+
+\subsection{Condition number and inverse}
+
+\input{table_strategies}
+
+\section{Scope and limitations}
+
+\begin{enumerate}
+  \item The derivations hold with the overdispersion parameters $\theta_p$ held fixed. This
+        matches what \texttt{information\_matrix} does and what CBMR reports, but it means the
+        reported standard errors do not propagate uncertainty in $\theta$. Extending to the joint
+        $(\phi,\theta)$ information would require the $\theta$ blocks, which are not derived here.
+  \item NiMARE's \texttt{check\_design} refuses the overdispersed distributions when any pattern
+        has a single experiment, which excludes a continuous spatial covariate. That is a
+        pre-existing restriction of the moment-matching approximation, not of these derivations;
+        the same term with a coarse covariate is accepted and handled.
+  \item The negative binomial $\gamma\gamma$ block \eqref{eq:nb-gg} is the least numerically
+        comfortable part of the implementation: $\Psi_R\,\partial^2R$ and $\Psi_A\,\partial^2A$ are
+        large and opposite in sign, and agreement with autodiff degrades from $\sim\!10^{-16}$ to
+        $\sim\!10^{-13}$ relative when moderators are present. This is far below any tolerance
+        that matters for standard errors but is worth knowing.
+  \item The covariance is returned as a dense $(CK+Q)^2$ array because
+        \texttt{contrasts.py} indexes it densely. At the $21$-group shape that is $430$~MB, and it
+        is the remaining memory floor; exploiting the block structure past the covariance itself
+        would require changes inside NiMARE.
+\end{enumerate}
+
+\clearpage
+\input{generated_proofs}
+
+\end{document}

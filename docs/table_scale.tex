@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\centering
+\caption{Whole \texttt{covariance()} call at the 21-group diagnosis shape: $7{,}329$
+coefficients, $21$ patterns, $8{,}444$ voxels, $349$ bases. ``chunked jacrev'' is
+$\texttt{jacrev}(\texttt{jacrev}(f), \text{chunk}=192)$ followed by \texttt{np.linalg.cond}
+and \texttt{np.linalg.inv}; stock \texttt{torch.func.hessian} does not run at this size at all,
+requiring a $9.7$~GB intermediate. Memory is the increment over the pre-call peak. The last
+column is the largest relative disagreement between the two covariance matrices.}
+\label{tab:scale}
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{2}{c}{chunked jacrev} & \multicolumn{2}{c}{closed form} & & \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+distribution & time & memory & time & memory & speed-up & disagreement \\
+\midrule
+Poisson                    & $205.4$~s & $+2.29$~GB & $1.5$~s & $+0.13$~GB & $139\times$ & $5.3\times10^{-15}$ \\
+NegativeBinomial           & $343.8$~s & $+2.74$~GB & $1.5$~s & $+0.00$~GB & $226\times$ & $6.3\times10^{-15}$ \\
+ClusteredNegativeBinomial  & $287.3$~s & ---        & $2.3$~s & ---        & $124\times$ & $3.7\times10^{-15}$ \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,34 @@
+\begin{table}[htbp]
+\centering
+\caption{Condition number and inverse, on synthetic matrices at the 21-group shape with the
+three structures real designs produce. ``dense'' is the stock path
+(\texttt{np.linalg.cond} $+$ \texttt{np.linalg.inv}). All inverses agree with the dense one to
+$\le 4.6\times10^{-15}$ relative. Rows marked $\star$ are what the ladder adopts. The
+blockwise row was measured with a per-block SVD; the implementation uses a per-block symmetric
+eigensolver, which returns the same values by Propositions~\ref{prop:spectrum}
+and~\ref{prop:eigh}.}
+\label{tab:strategies}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrr}
+\toprule
+structure & strategy & $\cond$ reported & $\cond$ time & inverse time & total \\
+\midrule
+\multirow{4}{*}{\shortstack[l]{block diagonal\\ \texttt{\textasciitilde\ s(a)}, $7329^2$}}
+ & dense (SVD $+$ LU)          & $5.0243$              & $157.2$~s & $14.2$~s & $171.4$~s\\
+ & \texttt{eigvalsh} $+$ Cholesky & $5.0243$           & $36.5$~s  & $7.6$~s  & $44.1$~s\\
+ & Cholesky $+$ \texttt{pocon} & $90.093$              & $2.9$~s   & $5.5$~s  & $8.4$~s\\
+ & $\star$ blockwise           & $5.0243$              & $0.4$~s   & $0.2$~s  & $\mathbf{0.7}$~s\\
+\midrule
+\multirow{4}{*}{\shortstack[l]{bordered\\ \texttt{\textasciitilde\ s(a) + x * z}, $7331^2$}}
+ & dense (SVD $+$ LU)          & $1657.7$              & $169.0$~s & $20.7$~s & $189.6$~s\\
+ & $\star$ \texttt{eigvalsh} $+$ Schur & $1657.7$      & $48.5$~s  & $4.1$~s  & $\mathbf{52.7}$~s\\
+ & Cholesky $+$ \texttt{pocon} & $2.42\times10^{5}$    & $4.7$~s   & $8.7$~s  & $13.3$~s\\
+ & blockwise                   & \multicolumn{4}{c}{\emph{not applicable --- the matrix does not separate}}\\
+\midrule
+\multirow{3}{*}{\shortstack[l]{fully coupled\\ \texttt{\textasciitilde\ sz(a) + sz(b)}, $7329^2$}}
+ & dense (SVD $+$ LU)          & $4.9796$              & $161.8$~s & $19.8$~s & $181.7$~s\\
+ & $\star$ \texttt{eigvalsh} $+$ Cholesky & $4.9796$   & $52.1$~s  & $15.8$~s & $\mathbf{67.8}$~s\\
+ & Cholesky $+$ \texttt{pocon} & $1312.4$              & $4.4$~s   & $8.6$~s  & $13.0$~s\\
+\bottomrule
+\end{tabular}}
+\end{table}

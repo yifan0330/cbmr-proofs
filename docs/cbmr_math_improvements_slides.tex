@@ -1,0 +1,467 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+
+\usetheme{Boadilla}
+\usecolortheme{dolphin}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamersize{text margin left=7mm,text margin right=7mm}
+\usepackage{amsmath,amssymb,mathtools,booktabs}
+\usepackage{microtype}
+\usepackage{hyperref}
+
+\definecolor{cbmrblue}{RGB}{27,71,112}
+\setbeamercolor{structure}{fg=cbmrblue}
+\setbeamercolor{frametitle}{fg=cbmrblue}
+\setbeamercolor{block title}{bg=cbmrblue!12,fg=cbmrblue}
+\setbeamercolor{block body}{bg=cbmrblue!4}
+\setbeamercolor{alerted text}{fg=red!75!black}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\operatorname{E}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\blkdiag}{\operatorname{blkdiag}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\bbeta}{\boldsymbol{\beta}}
+\newcommand{\bgamma}{\boldsymbol{\gamma}}
+\newcommand{\bmu}{\boldsymbol{\mu}}
+\newcommand{\btheta}{\boldsymbol{\theta}}
+\newcommand{\bxi}{\boldsymbol{\xi}}
+
+\title[CBMR math improvements]{The mathematical core of CBMR improvements}
+\subtitle{Selected derivations for discussion}
+\author{}
+\institute{Based on the expanded CBMR derivations}
+\date{}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+\begin{frame}{Why focus on the mathematics?}
+\begin{columns}[T,onlytextwidth]
+\column{0.57\textwidth}
+\begin{block}{Goal}
+Replace large automatic-differentiation calculations with formulas that expose
+the likelihood curvature and its structure.
+\end{block}
+\begin{itemize}
+  \item Fit the same specified likelihood; derive its score and information.
+  \item Exploit affine predictors, repeated patterns, and structured Hessian solves.
+  \item Keep statistical assumptions visible when simplifying computation.
+\end{itemize}
+\column{0.39\textwidth}
+\begin{block}{Scale motivating the work}
+On the 21-group diagnosis pool, the original Hessian autodiff intermediate was
+estimated at \textbf{28.7 GB} for 8,420 coefficients and 21,789 voxels.
+\end{block}
+\vspace{2mm}
+\small The formulas below target this intermediate, not the intrinsic cost of
+every possible covariance output.
+\end{columns}
+\end{frame}
+
+\begin{frame}{One predictor, two effect structures}
+For study $i$, voxel $j$, and a fixed offset $o_{ij}$:
+\[
+\eta_{ij}=\log\mu_{ij}.
+\]
+\begin{columns}[T,onlytextwidth]
+\column{0.49\textwidth}
+\begin{block}{Globally constant (GC)}
+\[
+\eta_{ij}=o_{ij}+B_j^\top\xi_{g(i)}+z_i^\top\gamma.
+\]
+The moderator effect $\gamma_q$ is constant over voxels.
+\end{block}
+\column{0.49\textwidth}
+\begin{block}{Spatially varying (SV)}
+\[
+\eta_{ij}=o_{ij}+\sum_{r=1}^R Z_{ir}B_j^\top\beta_r.
+\]
+The effect of moderator $r$ at voxel $j$ is $B_j^\top\beta_r$.
+\end{block}
+\end{columns}
+\vspace{1mm}
+\small For an affine design row $x_{ij}$, the predictor is
+$\eta_{ij}=o_{ij}+x_{ij}^\top\btheta$. Fixed dispersion and offsets are
+assumed in the regression derivatives that follow.
+\end{frame}
+
+\begin{frame}{Closed-form information: scalar derivative to matrix}
+Let $\ell_{ij}(\eta_{ij})$ be a cell log-likelihood, with
+$s_{ij}=\partial\ell_{ij}/\partial\eta_{ij}$ and
+$w_{ij}=-\partial^2\ell_{ij}/\partial\eta_{ij}^2$.
+Because $\eta_{ij}$ is affine in $\btheta$:
+\[
+U=\nabla_{\btheta}\ell=\sum_{i,j}x_{ij}s_{ij},
+\qquad
+\boxed{H=-\nabla_{\btheta}^2\ell
+=\sum_{i,j}w_{ij}x_{ij}x_{ij}^\top.}
+\]
+\begin{itemize}
+  \item No second derivative of the predictor appears; a nonlinear predictor
+        would add a score-weighted curvature term.
+  \item Poisson: $s=y-\mu$, $w=\mu$.
+  \item Independent NB2: $s=(y-\mu)/(1+\alpha\mu)$ and
+        $w^{\rm obs}=\mu(1+\alpha y)/(1+\alpha\mu)^2$.
+\end{itemize}
+\begin{alertblock}{Sign convention}
+$H$ is observed information (negative log-likelihood curvature);
+$\nabla^2\ell=-H$.
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Poisson: exact compression without losing study allocation}
+Under a separable exposure, write
+$\mu_{ij}=u_{g(i)j}v_i$, where
+$u_{gj}=e^{B_j^\top\xi_g}$ and $v_i=e_i e^{z_i^\top\gamma}$.
+Define $Y_{gj}=\sum_{i\in\mathcal I_g}Y_{ij}$ and $n_i=\sum_jY_{ij}$.
+\[
+\ell=\sum_{g,j}Y_{gj}B_j^\top\xi_g
+       +\sum_i n_i z_i^\top\gamma
+       -\sum_g\left(\sum_j u_{gj}\right)
+                \left(\sum_{i\in\mathcal I_g}v_i\right)+C.
+\]
+\begin{itemize}
+  \item This is an exact rearrangement of the full Poisson likelihood.
+  \item The compressed statistics include both voxel totals $Y_{gj}$ and
+        study totals $n_i$.
+  \item Fitting voxel totals alone drops the conditional allocation term
+        $\sum_i n_i\log(v_i/T_g)$ and therefore changes the global-covariate
+        information.
+\end{itemize}
+\begin{block}{Takeaway}
+Compression is exact because the omitted allocation structure is retained in
+the study totals; it is not simply ``sum counts over studies.''
+\end{block}
+\end{frame}
+
+\begin{frame}{Independent NB: observed and Fisher curvature differ}
+For NB2 with mean $\mu=e^\eta$ and dispersion $\alpha$:
+\[
+\ell_\eta=\frac{y-\mu}{1+\alpha\mu},\qquad
+-\ell_{\eta\eta}
+=\underbrace{\frac{\mu(1+\alpha y)}{(1+\alpha\mu)^2}}_
+                  {w^{\rm obs}}.
+\]
+Taking expectation at fixed $\mu,\alpha$ gives
+\[
+\underbrace{\E(w^{\rm obs})}_{w^{\rm F}}
+=\frac{\mu}{1+\alpha\mu},
+\quad\text{since }\E(Y)=\mu.
+\]
+\begin{itemize}
+  \item Observed weights depend on the realized counts; Fisher weights do not.
+  \item Both assemble through $H=X^\top\diag(w)X$, but they answer different
+        curvature questions.
+  \item As $\alpha\to0$, both weights tend to the Poisson weight $\mu$.
+\end{itemize}
+\begin{alertblock}{Structural warning}
+For NB, separable means do not generally imply separable information weights;
+a Poisson Kronecker shortcut is not automatically valid.
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Aggregated NB: moment matching is an approximation}
+Suppose independent cells have means $\mu_{ij}=u_jv_i$ and variance
+$\mu_{ij}+\alpha\mu_{ij}^2$. With
+$s_k=\sum_i v_i^k$:
+\[
+m_j=\E(Y_{\cdot j})=u_js_1,\qquad
+\Var(Y_{\cdot j})=u_js_1+\alpha u_j^2s_2.
+\]
+Matching an NB variance $m_j+m_j^2/\rho$ yields
+\[
+\rho=\frac{s_1^2}{\alpha s_2},\qquad
+A=\frac{s_1}{\alpha s_2},\qquad
+p_j=\frac{u_j}{u_j+A}.
+\]
+\begin{itemize}
+  \item This matches the first two moments, not generally the distribution.
+  \item The third-cumulant discrepancy is
+        $2\alpha^2u_j^3(s_3-s_2^2/s_1)\geq0$.
+  \item Equality holds for equal positive study factors; otherwise the
+        convolution is generally not exactly NB.
+\end{itemize}
+\begin{block}{Interpretation}
+Derivatives can be exact for this \emph{working likelihood}, while the
+likelihood itself remains an approximation to the summed-cell model.
+\end{block}
+\end{frame}
+
+\begin{frame}{Aggregated NB: the composite Hessian has inner curvature}
+The working negative log-likelihood is first differentiated in coordinates
+$(\eta,\rho,A)$; then $\rho$ and $A$ are composed with global coefficients
+$\gamma$.
+For $a,b$ indexing components of $\gamma$:
+\[
+\begin{aligned}
+\Psi_{\gamma_a\gamma_b}={}&
+\Psi_{\rho\rho}\rho_a\rho_b
++\Psi_{\rho A}(A_b\rho_a+\rho_bA_a)
++\Psi_{AA}A_aA_b\\
+&+\alert{\Psi_\rho\rho_{ab}+\Psi_AA_{ab}}.
+\end{aligned}
+\]
+\begin{itemize}
+  \item The last line is the curvature of the inner maps
+        $\rho(\gamma),A(\gamma)$.
+  \item It does not generally vanish at an observed regression optimum:
+        $\Psi_\rho$ and $\Psi_A$ need not separately be zero.
+  \item It vanishes in expectation under the correctly specified matched
+        distribution, not simply by setting the observed score to zero.
+\end{itemize}
+\begin{block}{Proof checkpoint}
+Differentiate the composite score $\Psi_\rho\rho_a+\Psi_AA_a$ once more;
+both product-rule terms produce the highlighted contribution.
+\end{block}
+\end{frame}
+
+\begin{frame}{Clustered NB: integrate one shared study effect}
+Let $\Lambda_i\sim\operatorname{Gamma}(\nu,\text{rate }\nu)$ be shared by all
+voxels in study $i$, and
+$Y_{ij}\mid\Lambda_i\sim\operatorname{Poisson}(\Lambda_i\mu_{ij})$.
+Writing $n_i=\sum_jy_{ij}$ and $t_i=\sum_j\mu_{ij}$, gamma integration gives
+\[
+\ell_i=\log\Gamma(n_i+\nu)-\log\Gamma(\nu)+\nu\log\nu
+-(n_i+\nu)\log(t_i+\nu)
++\sum_j y_{ij}\eta_{ij}+C(y_i).
+\]
+For $\bmu_i=(\mu_{i1},\ldots,\mu_{iN})^\top$ and
+$c_i=(n_i+\nu)/(t_i+\nu)$, the observed information in the log means is
+\[
+\boxed{W_i^{\rm obs}
+=c_i\left\{\diag(\bmu_i)
+-\frac{\bmu_i\bmu_i^\top}{t_i+\nu}\right\}.}
+\]
+\begin{itemize}
+  \item Integrating a shared multiplier induces off-diagonal dependence.
+  \item The negative rank-one term is essential; independent NB diagonal
+        weights describe a different model.
+  \item For an affine study design $X_i$, project directly:
+        $H_i=X_i^\top W_i^{\rm obs}X_i$.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Schur complement: shared effects couple otherwise separate maps}
+Disjoint spatial design components give $D=\blkdiag(D_1,\ldots,D_G)$,
+but shared global coefficients supply a border:
+\[
+H=\begin{pmatrix}D&F\\F^\top&\mathcal E\end{pmatrix},
+\qquad T=D^{-1}F,\qquad S=\mathcal E-F^\top T.
+\]
+From $Dx_D+Fx_\gamma=b_D$, substitute
+$x_D=D^{-1}b_D-Tx_\gamma$ into the second block equation:
+\[
+Sx_\gamma=b_\gamma-F^\top D^{-1}b_D,
+\qquad
+x_\gamma=S^{-1}(b_\gamma-F^\top D^{-1}b_D),\qquad
+x_D=D^{-1}b_D-Tx_\gamma.
+\]
+\begin{block}{The inversion step}
+Factor the smaller $D_g$ blocks and the $Q\times Q$ Schur matrix $S$;
+solve against right-hand sides rather than explicitly inverting $H$.
+\end{block}
+\small The displayed elimination requires invertible $D$ and $S$.
+For an SPD $H$ both are SPD; an indefinite or singular system needs
+appropriate pivoting or may have no ordinary inverse.
+\end{frame}
+
+\begin{frame}{What the block inverse proves about uncertainty}
+Expanding the Schur solve in $b_D$ and $b_\gamma$ yields
+\[
+\boxed{H^{-1}=
+\begin{pmatrix}
+D^{-1}+TS^{-1}T^\top&-TS^{-1}\\
+-S^{-1}T^\top&S^{-1}
+\end{pmatrix}.}
+\]
+\small For different groups $g\ne h$,
+$\Cov(\widehat\xi_g,\widehat\xi_h)\ \approx\
+T_gS^{-1}T_h^\top$ under the model-based covariance approximation.
+\begin{itemize}
+  \item Although $D_g$ and $D_h$ do not interact in $H$, their inverse
+        cross block generally is nonzero.
+  \item The correction $TS^{-1}T^\top$ has rank at most $Q$; when $H$ is
+        SPD it is positive semidefinite.
+\end{itemize}
+\begin{block}{Small check}
+For $D=\diag(2,3)$, $F=(1,1)^\top$, $\mathcal E=2$:
+$T=(1/2,1/3)^\top$, $S=7/6$, so the cross-group inverse entry is
+$(1/2)(6/7)(1/3)=1/7$, not zero.
+\end{block}
+\small The inverse identity is exact algebra; interpreting it as an estimator
+covariance is a local/asymptotic step.
+\end{frame}
+
+\begin{frame}{Inversion for contrasts: never form an unwanted full covariance}
+For $k$ requested linear contrasts (rows of $C$), solve
+\[
+HX=C^\top,\qquad
+\boxed{V_C=CX=CH^{-1}C^\top}.
+\]
+Only $k$ right-hand sides are needed. Partition
+$C=[\,C_D\ \ C_\gamma\,]$ and put $A_C=C_\gamma-C_DT$.
+The block inverse gives the smaller calculation
+\[
+\boxed{V_C=C_DD^{-1}C_D^\top+A_CS^{-1}A_C^\top.}
+\]
+\begin{itemize}
+  \item Factor each $D_g$ and $S$ once; compute both terms by solves.
+  \item For a spatial-only contrast, $C_\gamma=0$ but the Schur term
+        remains unless $C_DT=0$.
+  \item Factor storage: $O(\sum_gd_g^2+dQ+Q^2)$ rather than
+        $O((d+Q)^2)$ for dense factors; a full covariance output
+        still takes $O((d+Q)^2)$ entries.
+\end{itemize}
+\small Factorization work after assembly:
+$O(\sum_gd_g^3+Q\sum_gd_g^2+dQ^2+Q^3)$ versus
+$O((d+Q)^3)$ dense; savings depend on actual block sizes.
+\end{frame}
+
+\begin{frame}{Shared spatial patterns: one local calculation, many blocks}
+If pattern $h$ has spatial loading $L_h\in\R^R$, its effective map is
+$c_h=J_h\bbeta$, with $J_h=L_h^\top\otimes I_P$.
+For pattern curvature $K_h=\nabla_{c_h}^2F_h$:
+\[
+H_{\beta\beta}
+=\sum_hJ_h^\top K_hJ_h
+=\sum_h(L_hL_h^\top)\otimes K_h.
+\]
+\begin{itemize}
+  \item Compute local pattern curvature once, then scatter it into all
+        coefficient blocks (including cross-terms for overlapping loadings).
+  \item For independent cells, $B^\top\diag(w)B$ can be formed by row-weighting
+        $B$ rather than constructing $\diag(w)$.
+  \item This avoids a parameter-by-pattern-by-voxel autodiff intermediate.
+\end{itemize}
+\begin{alertblock}{Exact boundary}
+The information may have exploitable block or pattern structure, but a
+requested dense covariance still requires $O(n_\theta^2)$ storage.
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Checks run: symbolic identities and numerical implementations}
+\begin{columns}[T,onlytextwidth]
+\column{0.48\textwidth}
+\begin{block}{Exact symbolic checks}
+\begin{itemize}
+  \item \texttt{make proofs}: \textbf{120 claims closed}.
+  \item Every accepted SymPy residual reduced exactly to zero.
+\end{itemize}
+\end{block}
+\begin{block}{Implementation tests}
+\begin{itemize}
+  \item \texttt{make numerical}: \textbf{29 tests passed}.
+  \item Comparison unit tests: \textbf{13 tests passed}.
+\end{itemize}
+\end{block}
+\column{0.49\textwidth}
+\begin{block}{Seeded floating-point regression}
+\begin{itemize}
+  \item \textbf{512 required checks; 0 failures}.
+  \item Derivatives: 312 checks; largest relative Frobenius error
+        $3.14\times10^{-12}$.
+  \item Covariance: 29 checks; largest relative error
+        $2.99\times10^{-16}$.
+  \item Fit agreement: 100 checks; largest relative error
+        $3.47\times10^{-6}$.
+  \item 47 additional diagnostics retained for difficult cases; they are
+        reported separately from required failures.
+\end{itemize}
+\end{block}
+\end{columns}
+\vfill
+\scriptsize Float64 derivatives were checked against independent autodiff;
+structured covariance against dense references; fits at matched objectives.
+Dispersion was fixed.
+\end{frame}
+
+\begin{frame}{Formal coverage and measured full-pool performance}
+\begin{columns}[T,onlytextwidth]
+\column{0.48\textwidth}
+\begin{block}{Lean/Mathlib audit}
+\begin{itemize}
+  \item \texttt{make lean} passed; \textbf{357 theorem declarations audited}
+        with the axiom audit passing.
+  \item Appendix display inventory: \textbf{30 proved, 15 partial,
+        9 pending} (54 total).
+  \item Prose derivations: \textbf{8 proved, 1 partial, 6 pending}
+        (15 total).
+  \item Thus the Lean check is substantive but the full appendix is
+        \alert{not fully formalised}.
+\end{itemize}
+\end{block}
+\column{0.49\textwidth}
+\begin{block}{Real 21-group diagnosis pool}
+\small Same full run, including 20 one-versus-rest contrasts:
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lrr}
+\toprule
+Method & Time & Peak memory\\
+\midrule
+Stock autodiff & did not run & 28.7 GB estimated\\
+Chunked autodiff & 769 s & 5.49 GB\\
+Closed form & \textbf{44 s} & \textbf{2.67 GB}\\
+\bottomrule
+\end{tabular}
+}
+\end{center}
+\end{block}
+\end{columns}
+\vfill
+\scriptsize One measured run, not a performance guarantee. Lean formalisation
+is partial; empirical agreement is not a formal proof.
+\end{frame}
+
+\begin{frame}{What is proved, and what remains a modeling choice}
+\begin{columns}[T,onlytextwidth]
+\column{0.49\textwidth}
+\begin{block}{Evidence in the repository}
+\begin{itemize}
+  \item SymPy checks exact symbolic identities for selected derivatives and
+        matrix formulas.
+  \item Lean/Mathlib checks a subset of the derivations.
+  \item Independent numerical tests compare derivatives, solves, and fits.
+\end{itemize}
+\end{block}
+\column{0.49\textwidth}
+\begin{block}{Keep these distinctions}
+\begin{itemize}
+  \item Exact differentiation does not make an approximate likelihood exact.
+  \item Inverse information is not an exact finite-sample estimator variance.
+  \item Mathematical formulas do not imply every model variant is implemented.
+  \item Numerical agreement is not formal proof or inferential calibration.
+\end{itemize}
+\end{block}
+\end{columns}
+\vfill
+\small Primary source: \texttt{docs/cbmr\_expanded\_appendix.tex} and
+\texttt{docs/expanded\_covariance.tex}. The current Lean inventory explicitly
+does not certify every handwritten intermediate derivation.
+\end{frame}
+
+\begin{frame}{Take-home points}
+\begin{enumerate}
+  \item The affine log-link turns scalar likelihood curvature into a transparent
+        weighted design cross-product.
+  \item Correct reductions depend on the likelihood: Poisson compression is
+        exact with study totals; aggregated NB is moment matched; clustered NB
+        retains shared-study dependence.
+  \item Block and Schur algebra avoid a full Hessian inverse for selected
+        contrasts while retaining uncertainty from shared effects.
+\end{enumerate}
+\vfill
+\begin{block}{Suggested discussion}
+Which distinction is most consequential for the scientific analysis:
+GC versus SV effects, the choice among NB constructions, or joint uncertainty
+from shared global covariates?
+\end{block}
+\end{frame}
+
+\end{document}

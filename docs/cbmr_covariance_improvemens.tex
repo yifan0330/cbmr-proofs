@@ -1,0 +1,465 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{microtype}
+\emergencystretch=4em
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}[proposition]{Lemma}
+\theoremstyle{definition}
+\newtheorem{remark}[proposition]{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\spec}{\operatorname{spec}}
+\newcommand{\supp}{\operatorname{supp}}
+\newcommand{\cond}{\kappa}
+\newcommand{\blkdiag}{\operatorname{blkdiag}}
+
+\title{From the Hessian to the Covariance:\\
+Generalising the CBMR standard-error step}
+\author{Strategies, proofs, speed-ups, and what it costs in memory}
+\date{25 August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A companion note derives the CBMR observed information in closed form for all three of NiMARE's
+observation distributions. That removes the Hessian as a bottleneck and immediately exposes the
+next one: \texttt{CBMRModel.covariance} spends its remaining time in two dense LAPACK calls, a
+singular value decomposition for a diagnostic condition number and an LU inverse. At the
+21-group shape the SVD alone costs $163$~s against the $1.6$~s the Hessian now takes.
+
+This note treats those two calls. We prove five propositions --- structural separation, the
+blockwise inverse, the bordered (Schur) inverse, the block-diagonal spectrum, and the reduction
+of the condition number to a symmetric eigenproblem --- and close each one symbolically with
+\texttt{sympy}, exactly as the companion note does for the Hessians. We then establish which
+designs each applies to and verify the resulting dispatch over the same nine-design,
+three-distribution suite. One candidate is rejected on measurement rather
+than on theory: LAPACK's \texttt{pocon} condition estimator is $18$--$264\times$ off the true
+$2$-norm value here, comfortably inside its worst-case bound and comfortably too far to report
+to a user. What generalises without any hypothesis on the design is simpler --- the information
+matrix is symmetric, so a symmetric eigensolver replaces the SVD exactly.
+
+We then measure memory, which the earlier work had not. On the real 21-group diagnosis pool
+($8{,}420$ coefficients, $421$ bases, $21{,}789$ voxels, $8{,}178$ experiments) a complete run
+--- load, fit, covariance, and twenty one-versus-rest contrasts --- peaks at $2.67$~GB and takes
+$44$~s, against $5.49$~GB and $769$~s for the chunked-autodiff path and a $28.7$~GB intermediate
+for stock NiMARE, which is why the model could not be fitted at all.
+\end{abstract}
+
+\tableofcontents
+
+\section{The problem}
+
+Let $H \in \R^{n\times n}$ be the observed information over the $n = CK + Q$ regression
+coefficients. \texttt{CBMRModel.covariance} does two things with it:
+\begin{enumerate}
+  \item computes $\cond_2(H) = \sigma_{\max}/\sigma_{\min}$ with \texttt{np.linalg.cond}, purely
+        to decide whether to warn that the standard errors are untrustworthy;
+  \item inverts it with \texttt{np.linalg.inv}.
+\end{enumerate}
+\texttt{np.linalg.cond} forms a full singular value decomposition. At $n = 7{,}329$ that is
+$163$~s, against $14$~s for the inverse it is diagnosing and $1.6$~s for the Hessian itself.
+The diagnostic costs an order of magnitude more than the quantity.
+
+\section{Four strategies}
+
+Write $L \in \R^{P\times C}$ for the loadings, $\supp(p) = \{c : L_{pc}\neq 0\}$, and let $\sim$
+be the transitive closure of $c \sim c' \iff \exists p:\ c,c'\in\supp(p)$. \begin{proposition}[Structural separation]\label{prop:separation}
+For every one of the three distributions, $H_{(ck),(c'k')} = 0$ whenever $c \not\sim c'$.
+\end{proposition}
+\begin{proof}
+The companion note shows each distribution's Hessian has $\beta\beta$ block
+$\sum_p L_{pc}L_{pc'}(B^\top\Sigma_pB)_{kk'}$. Every summand carries the factor
+$L_{pc}L_{pc'}$, which vanishes unless $c,c' \in \supp(p)$; if some $p$ has both, then
+$c \sim c'$.
+\end{proof}
+
+That sparsity is the raw material here. It is a statement about the design, not the observation
+model, and the entries are structurally absent rather than merely small.
+
+\begin{proposition}[Block-diagonal spectrum]\label{prop:spectrum}
+If $H = \blkdiag(H_1,\dots,H_M)$ then $\spec(H) = \bigsqcup_j \spec(H_j)$, and the singular
+values are likewise the multiset union. Hence
+$\cond_2(H) = \max_j \sigma_{\max}(H_j)\big/\min_j\sigma_{\min}(H_j)$, exactly.
+\end{proposition}
+\begin{proof}
+$H - \lambda I$ is block diagonal with blocks $H_j - \lambda I$, and the determinant of a block
+diagonal matrix is the product of its blocks' determinants, so the characteristic polynomial
+factorises. Applying the same to $H^\top H$ gives the singular values.
+\end{proof}
+
+\begin{proposition}[Symmetry suffices]\label{prop:eigh}
+$H$ is symmetric by construction. For symmetric $H$ with eigenvalues $\lambda_i$ the singular
+values are $|\lambda_i|$, so $\cond_2(H) = \max_i|\lambda_i|/\min_i|\lambda_i|$ and a symmetric
+eigensolver may replace the SVD. No hypothesis on the design, and no positive definiteness.
+\end{proposition}
+\begin{proof}
+Write $H = V\Lambda V^\top$ with $V$ orthogonal; then $H^\top H = V\Lambda^2 V^\top$, so the
+singular values --- the nonnegative square roots of the eigenvalues of $H^\top H$ --- are
+$|\lambda_i|$.
+\end{proof}
+
+\begin{lemma}[Blockwise inverse]\label{lem:blockwise}
+If $H = \blkdiag(H_1,\dots,H_M)$ with each $H_j$ nonsingular, then
+$H^{-1} = \blkdiag(H_1^{-1},\dots,H_M^{-1})$.
+\end{lemma}
+\begin{proof}
+The product $\blkdiag(H_j)\blkdiag(H_j^{-1})$ is block diagonal with $j$-th block
+$H_jH_j^{-1} = I$, so it is the identity; inverses are unique.
+\end{proof}
+
+\begin{proposition}[Bordered inverse]\label{prop:schur}
+Suppose the spatial columns separate but $Q > 0$, so that
+\[
+  H = \begin{pmatrix} D & C\\ C^\top & E\end{pmatrix},
+  \qquad D = \blkdiag(D_1,\dots,D_M)\in\R^{CK\times CK},\quad C\in\R^{CK\times Q}.
+\]
+If $D$ and $\Sigma = E - C^\top D^{-1}C$ are nonsingular then
+\[
+  H^{-1} = \begin{pmatrix}
+    D^{-1} + D^{-1}C\Sigma^{-1}C^\top D^{-1} & -D^{-1}C\Sigma^{-1}\\
+    -\Sigma^{-1}C^\top D^{-1} & \Sigma^{-1}\end{pmatrix},
+\]
+at cost $O(\sum_j |D_j|^3) + O(Q^3)$ for the factorisations rather than $O((CK+Q)^3)$.
+\end{proposition}
+\begin{proof}
+Standard block inversion; verify by multiplying out $HH^{-1} = I$ blockwise using
+$E - C^\top D^{-1}C = \Sigma$.
+\end{proof}
+
+\begin{proposition}[One factorisation for both]\label{prop:chol}
+If $H \succ 0$ then a single Cholesky factorisation $H = LL^\top$ serves twice: \texttt{pocon}
+returns an estimate of $\cond_1(H)$ in $O(n^2)$ from $L$, and \texttt{potri} returns $H^{-1}$ in
+$O(n^3/3)$ from the same $L$. Moreover
+\begin{equation}\label{eq:norm-equiv}
+  n^{-1}\cond_1(H) \;\le\; \cond_2(H) \;\le\; n\,\cond_1(H).
+\end{equation}
+\end{proposition}
+\begin{proof}
+The routines are standard. For \eqref{eq:norm-equiv}, apply
+$n^{-1/2}\|M\|_1 \le \|M\|_2 \le n^{1/2}\|M\|_1$ to $M = H$ and $M = H^{-1}$ and multiply.
+\end{proof}
+
+\section{What the measurement rejected}
+
+Proposition~\ref{prop:chol} is by far the fastest route and \eqref{eq:norm-equiv} makes it look
+safe: a factor of $n$ is four of the sixteen available decimal digits. Measured on the three
+structures of Table~\ref{tab:strategies}, the \texttt{pocon} estimate reports $90.09$ against a
+true $\cond_2$ of $5.0243$, $2.42\times10^{5}$ against $1657.7$, and $1312.4$ against $4.9796$
+--- errors of $18\times$, $146\times$ and $264\times$.
+
+\begin{remark}
+Every one of those is inside the bound, which is the point. A bound that admits a $264\times$
+error admits behaviour that cannot be shown to a user as a condition number. A fit at
+$\cond_2 = 10^{14}$ --- badly conditioned but genuinely invertible --- would be reported near
+$10^{16}$ and trip a warning saying its standard errors must not be trusted.
+\end{remark}
+
+The resolution is to split the two uses of the factorisation. The Cholesky is kept for the
+\emph{inverse}, where it agrees with \texttt{np.linalg.inv} to $1.8\times10^{-15}$ and runs
+$2$--$3\times$ faster. It is discarded for the \emph{condition number}, which comes instead from
+Proposition~\ref{prop:eigh}: exact, fully general, and still $3$--$4\times$ faster than the SVD.
+
+\begin{table}[htbp]
+\centering
+\caption{Condition number and inverse on synthetic matrices at the 21-group shape, over the
+three structures real designs produce. ``dense'' is the stock path. All inverses agree with the
+dense one to $\le 4.6\times10^{-15}$ relative. Rows marked $\star$ are what the dispatch adopts.}
+\label{tab:strategies}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrr}
+\toprule
+structure & strategy & $\cond$ reported & $\cond$ time & inverse time & total\\
+\midrule
+\multirow{4}{*}{\shortstack[l]{block diagonal\\ \texttt{\textasciitilde\ s(a)}, $7329^2$}}
+ & dense (SVD $+$ LU) & $5.0243$ & $157.2$~s & $14.2$~s & $171.4$~s\\
+ & \texttt{eigvalsh} $+$ Cholesky & $5.0243$ & $36.5$~s & $7.6$~s & $44.1$~s\\
+ & Cholesky $+$ \texttt{pocon} & $90.093$ & $2.9$~s & $5.5$~s & $8.4$~s\\
+ & $\star$ blockwise & $5.0243$ & $0.4$~s & $0.2$~s & $\mathbf{0.7}$~s\\
+\midrule
+\multirow{4}{*}{\shortstack[l]{bordered\\ \texttt{\textasciitilde\ s(a) + x * z}, $7331^2$}}
+ & dense (SVD $+$ LU) & $1657.7$ & $169.0$~s & $20.7$~s & $189.6$~s\\
+ & $\star$ \texttt{eigvalsh} $+$ Schur & $1657.7$ & $48.5$~s & $4.1$~s & $\mathbf{52.7}$~s\\
+ & Cholesky $+$ \texttt{pocon} & $2.42\times10^{5}$ & $4.7$~s & $8.7$~s & $13.3$~s\\
+ & blockwise & \multicolumn{4}{c}{\emph{not applicable --- the matrix does not separate}}\\
+\midrule
+\multirow{3}{*}{\shortstack[l]{fully coupled\\ \texttt{\textasciitilde\ sz(a) + sz(b)}, $7329^2$}}
+ & dense (SVD $+$ LU) & $4.9796$ & $161.8$~s & $19.8$~s & $181.7$~s\\
+ & $\star$ \texttt{eigvalsh} $+$ Cholesky & $4.9796$ & $52.1$~s & $15.8$~s & $\mathbf{67.8}$~s\\
+ & Cholesky $+$ \texttt{pocon} & $1312.4$ & $4.4$~s & $8.6$~s & $13.0$~s\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\section{The dispatch, and its generality}
+
+\begin{enumerate}
+  \item \textbf{blockwise} --- spatial columns separate, $Q=0$. Condition number by
+        Proposition~\ref{prop:spectrum}, inverse blockwise.
+  \item \textbf{bordered} --- spatial columns separate, $Q>0$. Inverse by
+        Proposition~\ref{prop:schur}; the condition number cannot follow, because the spectrum of
+        a bordered matrix is not the union of its parts, so it falls back to
+        Proposition~\ref{prop:eigh}.
+  \item \textbf{Cholesky} --- no exploitable structure but $H\succ0$. Condition number by
+        Proposition~\ref{prop:eigh}, inverse by Cholesky.
+  \item \textbf{dense} --- $H\not\succ0$; the Cholesky declines and the general inverse runs.
+\end{enumerate}
+
+\begin{proposition}[The dispatch is well defined]\label{prop:welldefined}
+On every branch the dispatch returns $H^{-1}$ and the exact $\cond_2(H)$, so the rung taken
+affects only cost. Moreover rung~2 reduces to rung~1 when $C = 0$.
+\end{proposition}
+\begin{proof}
+Rung~1 returns $H^{-1}$ by Lemma~\ref{lem:blockwise} and $\cond_2(H)$ by
+Proposition~\ref{prop:spectrum}; rung~2 by Proposition~\ref{prop:schur} and
+Proposition~\ref{prop:eigh}; rung~3 by uniqueness of the Cholesky inverse and
+Proposition~\ref{prop:eigh}; rung~4 by definition. For the reduction, set $C=0$ in
+Proposition~\ref{prop:schur}: then $\Sigma = E$, the off-diagonal blocks of the stated inverse
+vanish and the leading block is $D^{-1}$, which is Lemma~\ref{lem:blockwise}.
+\end{proof}
+
+Every rung therefore reports the \emph{same} condition number, to the last printed digit.
+Structural claims are checked against the matrix in hand, never assumed: a design that ought to
+separate but whose information matrix has an entry outside the implied blocks is inverted
+densely, with a warning.
+
+Table~\ref{tab:ladder} verifies the dispatch over the nine-design, three-distribution suite. All
+four rungs fire; every one agrees with the dense inverse to within a tolerance scaled by the
+matrix's own conditioning. The important negative result is the bordered rung: a global moderator
+destroys block diagonality outright --- one block where there were twenty --- while leaving the
+spatial columns separable underneath, so the inverse is recovered even though the classification
+that motivated it is lost.
+
+\begin{table}[htbp]
+\centering
+\caption{The dispatch over every design the CBMR grammar produces, crossed with all three
+distributions. ``blocks'' counts the components of $\sim$; ``rung'' is what that buys. Relative
+error is against \texttt{np.linalg.inv} of the same matrix, worst over the distributions that
+accept the design.}
+\label{tab:ladder}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrlrr}
+\toprule
+design & formula & blocks & rung & $\cond_2$ & inverse rel.\ error\\
+\midrule
+cell-means factor & \texttt{\textasciitilde\ s(a)} & $4$ & blockwise & $4.8\times10^{4}$ & $4.0\times10^{-13}$\\
+full interaction & \texttt{\textasciitilde\ s(a:b)} & $8$ & blockwise & $4.7\times10^{4}$ & $1.6\times10^{-12}$\\
+additive main effects & \texttt{\textasciitilde\ sz(a) + sz(b)} & $1$ & Cholesky & $1.9\times10^{5}$ & $1.2\times10^{-12}$\\
+main effects $+$ interaction & \texttt{\textasciitilde\ sz(a) + sz(b) + sz(a:b)} & $1$ & dense$^{\dagger}$ & $4.1\times10^{20}$ & ---\\
+one global moderator & \texttt{\textasciitilde\ s(a) + x} & $1$ & bordered & $2.5\times10^{7}$ & $9.0\times10^{-13}$\\
+global moderator interaction & \texttt{\textasciitilde\ s(a) + x * z} & $1$ & bordered & $2.6\times10^{7}$ & $8.3\times10^{-13}$\\
+voxelwise moderator, continuous & \texttt{\textasciitilde\ s(a) + s(x)} & $1$ & Cholesky & $2.3\times10^{5}$ & $6.4\times10^{-13}$\\
+voxelwise moderator, coarse & \texttt{\textasciitilde\ s(a) + s(w)} & $1$ & Cholesky & $6.2\times10^{6}$ & $7.6\times10^{-12}$\\
+everything at once & \texttt{\textasciitilde\ sz(a) + sz(b) + s(w) + x * z} & $1$ & Cholesky & $5.1\times10^{7}$ & $3.3\times10^{-11}$\\
+\bottomrule
+\end{tabular}}
+
+\vspace{2pt}
+\raggedright\footnotesize
+$^{\dagger}$ Rank deficient at this sample size, so the Cholesky declines and the general inverse
+runs. No inverse of this matrix is trustworthy by any route, so no comparison is made; the test
+asserts the singularity instead.
+\end{table}
+
+\section{Equivalence}
+
+Two independent checks, matching the companion note's structure.
+
+\subsection{Symbolic}
+
+\texttt{scripts/symbolic\_covariance.py} restates each proposition over symbols and closes it
+with \texttt{sympy}. Every residual is exactly $0$; nothing numerical is involved. (The script
+runs structure, then inverses, then spectra; the table is ordered by proposition instead.)
+
+\begin{center}
+\begin{tabular}{llc}
+\toprule
+claim & residual checked & result\\
+\midrule
+Prop.~\ref{prop:separation} & cross block of two columns sharing no pattern & $0$\\
+\addlinespace
+Prop.~\ref{prop:spectrum} & $\det(\blkdiag(A,B)-\lambda I) - \det(A-\lambda I)\det(B-\lambda I)$ & $0$\\
+\addlinespace
+\multirow{2}{*}{Prop.~\ref{prop:eigh}}
+ & $H^\top H - H^2$ for symmetric $H$ & $0$\\
+ & $\det(H^2-\lambda^2 I) - \det(H-\lambda I)\det(H+\lambda I)$ & $0$\\
+\addlinespace
+Lem.~\ref{lem:blockwise} & $\blkdiag(A,B)^{-1} - \blkdiag(A^{-1},B^{-1})$ & $0$\\
+\addlinespace
+\multirow{4}{*}{Prop.~\ref{prop:schur}}
+ & $D\,\mathrm{TL} + C\,\mathrm{BL} - I_m$ & $0$\\
+ & $D\,\mathrm{TR} + C\,\mathrm{BR}$ & $0$\\
+ & $C^\top \mathrm{TL} + E\,\mathrm{BL}$ & $0$\\
+ & $C^\top \mathrm{TR} + E\,\mathrm{BR} - I_q$ & $0$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{remark}[Why Proposition~\ref{prop:schur} is proved over matrix symbols]
+Filling in a $4\times4$ symbolic $D^{-1}$ inside a $6\times6$ product makes \texttt{simplify}
+intractable --- the attempt does not terminate. It also proves less. The identity needs only
+that $D$ and $\Sigma$ are invertible and that the shapes conform, so $D^{-1}$ and $\Sigma^{-1}$
+are left formal and the sole rewrites used are $DD^{-1} = I$ and, through
+$E = \Sigma + C^\top D^{-1}C$, the definition of the Schur complement. The result is a proof for
+arbitrary conformable blocks rather than for one filled-in instance, and
+Lemma~\ref{lem:blockwise} is what licenses computing that $D^{-1}$ blockwise.
+\end{remark}
+
+\subsection{Numerical}
+
+\texttt{test\_cbmr\_analytic.py} applies all four rungs to \emph{the same} matrix rather than to
+four separate fits, so nothing about a fit can mask a disagreement: a block diagonal
+$48\times48$ and the same matrix with a $2$-column border welded on. Blockwise, Cholesky and
+both routes to the condition number match the dense ones to $10^{-10}$; setting the border to
+zero returns the Schur complement to the blockwise inverse exactly, which is
+Proposition~\ref{prop:welldefined}'s reduction claim in arithmetic.
+\texttt{test\_cbmr\_designs.py} then exercises the dispatch on real fits, over the suite of
+Table~\ref{tab:ladder}.
+
+\section{Memory}
+
+Speed was measured first because it was the visible failure. Memory is the one that decides
+whether the model can be fitted at all.
+
+\subsection{Where it goes}
+
+Three allocations dominate, all $O(n^2)$: the information matrix, the covariance returned to the
+caller, and whatever working copy the chosen strategy makes. At the real 21-group shape
+$n = 8{,}420$, so each is $0.53$~GB. Everything else --- the sparse foci, the
+$(V\times K)$ basis, the L-BFGS history, the per-pattern log-intensity --- is an order of
+magnitude smaller.
+
+\begin{remark}[A saving that is not there]
+\texttt{np.zeros} is lazily backed, and the blockwise inverse writes only the diagonal blocks
+--- $19$~MB of a $400$~MB array at the synthetic shape. It is tempting to conclude that a
+block-diagonal covariance is nearly free in resident memory. Measured, it is not: writing the
+diagonal blocks moves resident memory by $+0.399$~GB, essentially the whole array, because the
+blocks are strided across every row and the fault granularity is coarser than the writes.
+Reads genuinely do not fault --- two full passes over the array cost $+0.000$~GB --- but that is
+no help, since the array is fully resident by then. Budget $n^2$ words, not the blocks.
+\end{remark}
+
+\subsection{Measured, per call}
+
+Table~\ref{tab:memory} reports peak resident memory \emph{during} the \texttt{covariance()} call,
+sampled at $100$~Hz from \texttt{/proc/self/statm}. \texttt{ru\_maxrss} is the wrong instrument
+here: it is a high-water mark for the whole process, so it reports whatever the setup allocated.
+
+\begin{table}[htbp]
+\centering
+\caption{Peak resident memory during one \texttt{covariance()} call, one process per row.
+``matrix'' is $n^2$ words, the unavoidable floor. The last column is the intermediate stock
+\texttt{torch.func.hessian} would require, which is why none of these shapes runs on it.}
+\label{tab:memory}
+\begin{tabular}{lrlrrrr}
+\toprule
+shape & $n$ & rung & time & peak $\Delta$ & matrix & stock needs\\
+\midrule
+diagnosis, 10 groups & $4{,}100$ & blockwise & $1.1$~s & $0.18$~GB & $0.13$~GB & $4.9$~GB\\
+task, 10 groups & $4{,}270$ & blockwise & $1.8$~s & $0.19$~GB & $0.14$~GB & $7.7$~GB\\
+diagnosis, 21 groups & $7{,}329$ & blockwise & $1.3$~s & $0.48$~GB & $0.40$~GB & $9.7$~GB\\
+diagnosis, 21 groups $+$ moderator & $7{,}330$ & bordered & $40.6$~s & $1.28$~GB & $0.40$~GB & $9.7$~GB\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The blockwise rung costs about what the matrix costs. The bordered rung costs roughly three
+times that, and is $30\times$ slower: it pays for a full symmetric eigendecomposition of the
+whole matrix (Proposition~\ref{prop:eigh} cannot be localised to the blocks) and for a dense
+$D^{-1}$ alongside the result. It is still a large improvement on the dense path, but it is the
+expensive rung, and a design that avoids moderators avoids it.
+
+\subsection{Measured, end to end}
+
+Table~\ref{tab:e2e} is the number that answers the practical question. The run is the real
+21-group diagnosis pool --- every category with at least $200$ studies, excluding Healthy ---
+at $4$~mm with \texttt{spline\_spacing=5}: $20$ groups after pooling, $8{,}178$ experiments,
+$8{,}420$ coefficients, $421$ bases, $21{,}789$ analysis voxels. It covers everything a user
+does: load, fit, covariance, and twenty one-versus-rest contrasts.
+
+\begin{table}[htbp]
+\centering
+\caption{Complete 21-group run, real data, cumulative peak \texttt{ru\_maxrss} at each stage.
+``chunked'' is the previous \texttt{jacrev} path with the dense SVD and LU; ``closed form'' is
+the closed-form Hessian with the dispatch of Section~4. Stock NiMARE does not appear because it
+does not complete: \texttt{torch.func.hessian} requires a $28.7$~GB intermediate at this shape.}
+\label{tab:e2e}
+\begin{tabular}{lrrrr}
+\toprule
+& \multicolumn{2}{c}{chunked autodiff} & \multicolumn{2}{c}{closed form}\\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+stage & time & peak & time & peak\\
+\midrule
+load studyset & $1.8$~s & $0.74$~GB & $1.8$~s & $0.74$~GB\\
+fit $+$ covariance & $398.7$~s & $4.40$~GB & $27.4$~s & $2.07$~GB\\
+20 one-versus-rest contrasts & $368.8$~s & $5.49$~GB & $14.7$~s & $2.67$~GB\\
+\midrule
+\textbf{total} & $\mathbf{769}$~s & $\mathbf{5.49}$~GB & $\mathbf{44}$~s & $\mathbf{2.67}$~GB\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+$17\times$ faster and half the memory. The contrast stage improves by more than the memoisation
+alone predicts; part of that gap is likely contention on the shared machine and should not be
+read as a $25\times$ effect of this change.
+
+\subsection{Will it run on a laptop?}
+
+At $2.67$~GB peak, the complete 21-group analysis fits on a $10$--$12$~GB machine with room to
+spare --- roughly a quarter of available RAM, leaving the operating system and everything else
+untouched. The $10$-group diagnosis and task models are smaller still. Three caveats:
+
+\begin{itemize}
+  \item Memory grows as $n^2 = (CK+Q)^2$, and $C$ is the group count. Doubling the groups
+        quadruples the covariance: $40$ groups at $421$ bases gives $n = 16{,}840$ and
+        $2.11$~GB per matrix. Extrapolating the measured ratio of peak to matrix size on the
+        blockwise rung ($\approx\!1.2$), that is roughly $6$--$8$~GB peak --- still inside a
+        $12$~GB machine, but no longer with room to spare. This is an extrapolation, not a
+        measurement. It is the ceiling to watch, and \texttt{spline\_spacing} moves it as
+        directly as the group count does.
+  \item Adding a global moderator moves the fit onto the bordered rung, which measured $2.7\times$
+        the memory and $30\times$ the time of the blockwise one.
+  \item The covariance is returned dense because \texttt{contrasts.py} indexes it densely. That
+        $0.53$~GB is the floor; removing it means changing NiMARE.
+\end{itemize}
+
+\section{Identification}
+
+At the real shape there are $8{,}420$ coefficients and $8{,}178$ experiments, which invites the
+conclusion that the model has more parameters than data. It does not, and the reason is worth
+recording because the reassuring version of the argument is also wrong.
+
+CBMR's likelihood is not over experiment rows. It is over voxel-level foci counts, summarised
+per pattern, so there are $P \times V = 435{,}780$ count observations --- $52$ per coefficient.
+More to the point, the spatial factor term is block diagonal, so the model is not one problem
+with $8{,}420$ parameters but twenty independent problems with $421$ each, and each group's
+coefficients are identified by that group's own foci. Measured over the real pool, foci per
+coefficient runs from $8.1$ (hearing loss, $221$ studies, $3{,}406$ foci) to $65.4$ (Alzheimer's,
+$1{,}345$ studies, $27{,}529$ foci), and every per-group block has condition number between
+$3.8\times10^{4}$ and $3.0\times10^{5}$ --- far from the $\epsilon^{-1}\approx4.5\times10^{15}$
+at which double precision gives out.
+
+\begin{remark}[The diagnostic does not diagnose this]
+Under a canonical link the observed information equals the expected information, so for Poisson
+$H$ is a function of the fitted intensity and the group sizes and not of the foci directly. A
+group can be far too thin for the asymptotics while still producing a perfectly invertible block.
+Fitting three groups of sizes $(40,40,40)$, $(40,40,10)$, $(40,40,4)$ and $(40,40,2)$, the thin
+group's condition number stays between $1.3\times10^{4}$ and $1.5\times10^{5}$ throughout ---
+no trend, no warning --- while its median coefficient standard error rises from $27.5$ to
+$150.2$. The standard errors do respond; the conditioning warning does not. It is the wrong
+instrument for detecting a data-starved group, and \texttt{incidence\_threshold} together with
+the per-term parameter budget from \texttt{describe\_terms()} is the right one.
+\end{remark}
+
+\clearpage
+\input{generated_proofs}
+
+\end{document}

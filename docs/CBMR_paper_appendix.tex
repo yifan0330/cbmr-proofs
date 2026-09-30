@@ -1,0 +1,2015 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,tabularx,hyperref,microtype}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue,
+  pdftitle={Expanded Appendix: CBMR group and covariate inference},
+  pdfsubject={Standalone mathematical appendix for Yu et al., Imaging Neuroscience 3 (2025)}}
+\emergencystretch=3em
+\newcommand{\R}{\mathbb R}
+\newcommand{\E}{\operatorname{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\blkdiag}{\operatorname{blkdiag}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\softplus}{\operatorname{softplus}}
+\newcolumntype{T}{>{\raggedright\arraybackslash}X}
+\numberwithin{equation}{section}
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{2}
+\title{CBMR: Coordinate-based meta-regression for group and covariate inference\\
+  \large Standalone expanded mathematical appendix to Yu et al. (2025)}
+\author{}
+\date{15 September 2026}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+This editable appendix develops the model and inference calculations for
+Yu et al., \emph{Imaging Neuroscience} 3 (2025),
+DOI \href{https://doi.org/10.1162/IMAG.a.1057}{10.1162/IMAG.a.1057}.
+It concerns group-specific spatial baselines and shared, globally constant
+study-covariate effects, exactly the regression setup of that article.
+Poisson compression, moment-matched negative-binomial aggregation,
+study-clustered negative-binomial integration, complete likelihood
+derivatives, structured covariance, and group and covariate tests are
+derived step by step. Exact algebra, working-distribution approximations,
+and asymptotic inference are distinguished throughout. The paper's
+row-vector covariate notation and selected-group/covariate contrasts
+are retained, with new helper symbols explicitly distinguished.
+Qualifications
+address covariate information lost by aggregation, dispersion held fixed
+versus jointly estimated, identifiability of a totals-only model with
+free group scales, and the uncertainty interpretation of smoothing.
+These are self-contained handwritten derivations for manual review, not
+full formal-proof certification of the article or of this document.
+\end{abstract}
+\noindent\textbf{Scope.}
+The sole scientific reference is the supplied
+\texttt{docs/imag.a.1057.pdf}. This is an explanatory companion, not the
+article's original supplementary appendix. Repository derivation notes
+provided algebraic provenance; no other manuscript's model is required.
+All equations below are numbered independently of the paper.
+
+\tableofcontents
+\clearpage
+
+\section{Paper-specific setup and correspondence}\label{sec:setup}
+
+\subsection{Indices, dimensions, and the regression model}
+Let $\mathcal I_g$ be the set of studies in group $g$,
+$M_g=|\mathcal I_g|$, and $\sum_gM_g=M$.
+There are $N$ voxels in a fixed analysis mask and $G$ disjoint groups.
+For study $i$, $g(i)$ denotes its group. The observed count at voxel $j$
+is $Y_{ij}$, with positive mean $\mu_{ij}$.
+The paper notes that these counts are usually zero or one.
+Poisson and NB distributions nevertheless assign mass to larger counts:
+they are count-model approximations, not normalized Bernoulli models.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{l l T}
+\toprule
+Symbol & Dimension & Meaning\\
+\midrule
+$X,\ x_j$ & $N\times P,\ P\times1$ & Cubic B-spline design;
+row $j$ of $X$ is $x_j^\top$\\
+$\beta_g$ & $P\times1$ & Spatial baseline coefficients for group $g$\\
+$Z,\ Z_i$ & $M\times R,\ 1\times R$ & Study design and its
+row $i$, in the paper's row-vector convention\\
+$\gamma$ & $R\times1$ & Shared, globally constant covariate coefficients\\
+$\vartheta$ & $(GP+R)\times1$ & Stacked regression coefficients only\\
+$\alpha_g$ & scalar & Original group NB overdispersion\\
+$r'_{gj},\ p'_{gj},\ \alpha'_g$ & scalars & Paper's matched NB
+shape, count probability, and effective dispersion\\
+$\nu_g$ & scalar & Clustered gamma shape and rate, $1/\alpha_g$\\
+$H,\ I$ & $(GP+R)\times(GP+R)$ & Observed and expected information\\
+\bottomrule
+\end{tabularx}
+\end{center}
+The symbol $R$ always counts global covariates; it never denotes a shape.
+The paper's single-group and multi-group setups are captured by
+\begin{align}
+ \eta_{ij}=\log\mu_{ij}
+ &=x_j^\top\beta_{g(i)}+{Z_i}\gamma,
+ &\vartheta&=(\beta_1^\top,\ldots,\beta_G^\top,\gamma^\top)^\top,
+ \label{eq:predictor}\\
+ \mu_{gj}^X&=\exp(x_j^\top\beta_g),
+ &\mu_i^Z&=\exp({Z_i}\gamma),&
+ \mu_{ij}&=\mu_{g(i)j}^X\mu_i^Z. \label{eq:separable}
+\end{align}
+The superscripts $X$ and $Z$ label the paper's spatial and study
+mean factors; they are not powers. In particular $Z_i\gamma$ is
+a scalar, $\nabla_\gamma\mu_i^Z=\mu_i^Z Z_i^\top$ is a column,
+and $\nabla_\gamma^2\mu_i^Z=\mu_i^Z Z_i^\top Z_i$ is an $R\times R$
+matrix. Transposing $Z_i$ in the predictor would reverse the
+paper's row convention.
+Thus $\partial\eta_{ij}/\partial Z_{ir}=\gamma_r$ is constant over voxels.
+A spatially varying baseline is \emph{not} a spatially varying moderator
+effect. No coefficient-map extension for moderators is developed here.
+The single-group stacked predictor is
+$(\mathbf1_M\otimes X)\beta+(Z\otimes\mathbf1_N)\gamma$,
+recovering paper Equation~2 with studies stacked before voxels.
+
+\subsection{Native paper symbols and explicitly new helper quantities}
+The paper uses $\theta$ for the complete parameter vector in its
+likelihoods, and $\theta_j$ for a different object in voxelwise inference.
+We keep those meanings. The regression-only vector $\vartheta$
+is an additional helper, not a redefinition of $\theta$:
+\begin{align}
+ \theta_{\rm P}&=\vartheta,\\
+ \theta_{\rm NB}
+ &=(\beta_1^\top,\ldots,\beta_G^\top,
+                 \alpha'_1,\ldots,\alpha'_G,\gamma^\top)^\top,\\
+ \theta_{\rm CNB}
+ &=(\beta_1^\top,\ldots,\beta_G^\top,
+                 \alpha_1,\ldots,\alpha_G,\gamma^\top)^\top .
+\end{align}
+These match the parameter lists in paper Equations 6, 9, and 11.
+An alternative original-dispersion coordinate for the matched NB
+replaces $\alpha'_g$ by $\alpha_g$ using Equation~8; its fixed-coordinate
+derivatives are distinguished below.
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{lT}
+\toprule
+Paper symbol & Definition and use here\\
+\midrule
+$Y_g,\ Y_{gj}$ & Group--voxel counts:
+$Y_{gj}=\sum_{i\in\mathcal I_g}Y_{ij}$, with $Y_g\in\R^N$\\
+$Y_t,\ Y_{ti}$ & Study totals:
+$Y_{ti}=\sum_jY_{ij}$, with $Y_t\in\R^M$\\
+$\mu_{gj},\ \mu_{ti}$ & Means of those two totals:
+$\mu_{gj}=\sum_{i\in\mathcal I_g}\mu_{ij}$ and
+$\mu_{ti}=\sum_j\mu_{ij}$\\
+$\mu_g^X,\ \mu^Z$ & Spatial and study mean factors, not the
+mean of a group total or the mean of a study total\\
+$r'_{gj},\ p'_{gj}$ & Matched NB parameters; derivation below shows
+$r'_{gj}=r'_g$ for the paper's separable predictor\\
+$\theta_j,\ V_j$ & The $S$ selected groups' voxelwise values and
+their $S\times S$ covariance, as in paper Equation~12\\
+$C,\ m,\ S$ & Group contrast $C\in\R^{m\times S}$, with $m$
+tested constraints and $S$ involved groups\\
+$C_\gamma,\ s$ & Covariate contrast $C_\gamma\in\R^{m\times s}$
+on $s$ selected covariates, as in paper Equation~14\\
+$W_j$ & Signed scalar Wald statistic of paper Equation~13;
+its square is the corresponding chi-square statistic\\
+\bottomrule
+\end{tabularx}
+\end{center}
+The occurrence $\mu_{g(i)j}$ in paper Equation~5 denotes study $i$'s
+cell mean with its group made explicit; we write it as $\mu_{ij}$.
+Without the study index, $\mu_{gj}=\E Y_{gj}$ is instead the
+\emph{aggregate} mean in Equations~6--9. This distinction is essential.
+The paper's $S$ counts selected groups, so we write the Schur complement
+as $\mathcal S$, never plain $S$.
+The helper $\nu_g=1/\alpha_g$ denotes clustered gamma shape and rate,
+while $\lambda_i$ remains the paper's random study multiplier.
+New smoothing strengths are denoted $\tau_g$, to keep them distinct
+from that random multiplier.
+The symbols $H,I,U,\Psi,A,s_1,s_2,h_g,T_g$ and calligraphic
+coefficient-contrast matrices below are explicitly defined algebraic
+helpers; they are not additional fitted models.
+Lowercase $y$ in a scalar mass $p(y)$ is an observed integer argument.
+
+\subsection{Stacking the grouped design one row at a time}
+Define $L_{ig}=\mathbf1\{g(i)=g\}$, so $L\in\R^{M\times G}$.
+Row $(i,j)$ of $L\otimes X$ is $e_{g(i)}^\top\otimes x_j^\top$.
+Row $(i,j)$ of $Z\otimes\mathbf1_N$ is $Z_i$.
+Therefore, with study index varying slowest,
+\begin{equation}
+ \mathcal X=[\,L\otimes X\quad Z\otimes\mathbf1_N\,],
+ \qquad \eta=\mathcal X\vartheta,\qquad
+ \dim(\mathcal X)=MN\times(GP+R).
+\end{equation}
+The $X$ in this formula is still the paper's $N\times P$ spatial
+matrix; $\mathcal X$ is a new name for the much larger combined
+design, which need not be constructed numerically.
+For $G=1$, $L=\mathbf1_M$, giving the single-group design of
+paper Equation~2. This verifies the coefficient ordering used in
+all later block matrices.
+
+\subsection{Group-specific constant effects allowed by the paper}
+Paper Section 1.2.2 describes both independent group fits and a
+single fit with group-supported covariate columns.
+For a covariate row $Z_i\in\R^{1\times R_0}$ whose effects are all
+group-specific, construct
+\[
+ Z^{\rm sep}_{i,(g,r)}
+   =\mathbf1\{g(i)=g\}Z_{ir},\qquad
+ \gamma^{\rm sep}=(\gamma_1^\top,\ldots,\gamma_G^\top)^\top.
+\]
+Then $Z_i^{\rm sep}\gamma^{\rm sep}=Z_i\gamma_{g(i)}$, and
+\[
+ \eta_{ij}=x_j^\top\beta_{g(i)}+Z_i\gamma_{g(i)}.
+\]
+For two groups, two studies per group, and a single covariate with
+values $a_1,\ldots,a_4$, the new study design is
+\[
+ Z^{\rm sep}=
+ \begin{pmatrix}a_1&0\\a_2&0\\0&a_3\\0&a_4\end{pmatrix}.
+\]
+There are still scalar moderator effects constant over voxels.
+This construction does not introduce spatial coefficient maps.
+With only group-specific parameters, independent group data, and
+separate group penalties, the likelihood factors in parameter
+blocks $\zeta_g=(\beta_g^\top,\gamma_g^\top)^\top$.
+Cross derivatives in $\zeta_g,\zeta_h$ vanish for $g\ne h$, and
+the full information and covariance are block diagonal after
+ordering by $\zeta_g$. This is why the two fitting strategies agree
+under those conditions.
+
+For a mixture of common and group-specific covariates, write
+\[
+ \eta_{ij}=x_j^\top\beta_{g(i)}
+            +Z_i^{\rm common}\gamma^{\rm common}
+            +Z_i^{\rm specific}\gamma_{g(i)}^{\rm specific}.
+\]
+Combine $(\beta_g,\gamma_g^{\rm specific})$ into each group block.
+The common coefficients form the remaining border, so the later
+Schur formulas apply with these enlarged group blocks.
+Groups are not independent after estimating that shared border.
+Constant-within-group covariates can still be confounded with
+spatial intercepts; encoding them in separate columns does not
+by itself create identifiability.
+
+\subsection{Correspondence with the published equations}
+\begin{center}
+\begin{tabularx}{\textwidth}{l T T}
+\toprule
+Paper location & Subject & Expansion here\\
+\midrule
+Equations 1--5 & Single/multiple groups, shared covariates,
+separable mean & Sections \ref{sec:setup}--\ref{sec:chain}\\
+Equation 6 & Poisson likelihood and compression &
+Section \ref{sec:poisson}, including the allocation qualification\\
+Equations 7--9 & NB moment matching and aggregate likelihood &
+Sections \ref{sec:cellnb}--\ref{sec:aggregate}\\
+Equations 10--11 & Within-study dependence and clustered likelihood &
+Section \ref{sec:cluster}\\
+Algorithm 1 & Alternating dispersion and regression updates &
+Section \ref{sec:optimization}\\
+Equations 12--14 & Group-map and global-covariate Wald inference &
+Sections \ref{sec:covariance}--\ref{sec:inference}\\
+Section 2.1.4 & Bootstrap and numerical caveats &
+Sections \ref{sec:bootstrap}--\ref{sec:numerics}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Paper Section 2.1.2 explicitly excludes quasi-Poisson from its fitted
+pipeline, despite introductory discussion of earlier work. Accordingly
+there is no fourth fitted quasi-Poisson family in this appendix.
+The independent-cell NB below is the generative starting point for
+the paper's moment-matched NB, not a claim that an additional
+independent-cell fitting option was evaluated in that article.
+
+\subsection{Identification and the meaning of information}
+Covariates are preprocessed and centered as described in the paper.
+Centering improves interpretation, but does not by itself prove rank.
+If $Xc=\mathbf1_N$ and ${Z_i} d=b_{g(i)}$ for every study, then
+\begin{equation}
+ \beta_g\mapsto\beta_g-tb_gc,\qquad
+ \gamma\mapsto\gamma+td
+ \quad\Longrightarrow\quad \eta_{ij}\text{ unchanged}.
+ \label{eq:confounding}
+\end{equation}
+An intercept in $Z$, a group-constant covariate, redundant spline columns,
+or combinations of such directions require constraints or removal.
+Constraints must also be respected when forming contrasts and covariance.
+Full rank, finite fitted means, and an interior finite optimum are separate
+requirements; an all-zero region can drive coefficients towards a boundary.
+
+We write $\ell$ for log likelihood, $L=-\ell$ for negative log likelihood,
+$U=\nabla\ell$ for score, and
+\begin{equation}
+ H=-\nabla^2\ell=\nabla^2L,\qquad I=\E_\vartheta H.
+ \label{eq:information}
+\end{equation}
+Dispersion is held fixed in regression derivatives unless stated otherwise.
+Under a correctly specified regular likelihood, differentiation under
+the expectation gives $\E U=0$ and $I=\Var(U)$.
+Those are distributional facts with regularity conditions.
+Inverting a matrix is exact algebra; identifying its inverse with estimator
+covariance is normally a first-order asymptotic approximation.
+A working likelihood may have exact derivatives without being the exact
+distribution of the data, and its inverse Hessian need not give robust
+sampling uncertainty.
+
+\section{Affine differentiation and group information blocks}\label{sec:chain}
+
+\subsection{From a scalar mean to a coefficient Hessian}
+Let $e_g$ be column $g$ of the $G$-dimensional identity and define
+\begin{equation}
+ b_{ij}=\begin{pmatrix}e_{g(i)}\otimes x_j\\{Z_i^\top}\end{pmatrix},
+ \qquad \eta_{ij}=b_{ij}^\top\vartheta .
+\end{equation}
+The cell-design vector $b_{ij}$ is not the spatial row $x_j$.
+For a single cell, suppress its indices and let $\mu=e^\eta$.
+Direct differentiation gives
+\begin{align}
+ \partial_a\eta&=b_a,& \partial_{ab}\eta&=0,&
+ \partial_a\mu&=\mu b_a,& \partial_{ab}\mu&=\mu b_ab_b.
+\end{align}
+For any twice differentiable scalar function $\ell(\mu)$,
+\begin{align}
+ \partial_a\ell&=\ell_\mu\mu b_a=\ell_\eta b_a,\\
+ \partial_{ab}\ell
+ &=\ell_{\mu\mu}\mu^2b_ab_b+\ell_\mu\mu b_ab_b
+ =\ell_{\eta\eta}b_ab_b. \label{eq:affine-chain}
+\end{align}
+The $\ell_\mu\mu$ term is essential: differentiating only the outer
+function with respect to $\mu$ is not the log-link Hessian.
+Equivalently, $d\ell=\ell_\eta b^\top d\vartheta$ and
+$d^2\ell=\ell_{\eta\eta}(b^\top d\vartheta)^2$.
+
+\subsection{Independent factors and spatial support}
+When cells are independent, write
+$s_{ij}=\partial\ell_{ij}/\partial\eta_{ij}$ and
+$w_{ij}=-\partial^2\ell_{ij}/\partial\eta_{ij}^2$.
+Summing \eqref{eq:affine-chain} yields
+\begin{equation}
+ U=\sum_{i,j}b_{ij}s_{ij},\qquad
+ H=\sum_{i,j}w_{ij}b_{ij}b_{ij}^\top. \label{eq:cell-assembly}
+\end{equation}
+Its individual blocks are
+\begin{align}
+ H_{\beta_g\beta_g}
+ &=\sum_{i\in\mathcal I_g}\sum_jw_{ij}x_jx_j^\top,\\
+ H_{\beta_g\beta_h}&=0\quad(g\ne h),\\
+ H_{\beta_g\gamma}
+ &=\sum_{i\in\mathcal I_g}\sum_jw_{ij}x_j{Z_i},\\
+ H_{\gamma\gamma}&=\sum_{i,j}w_{ij}{Z_i^\top}{Z_i}. \label{eq:group-blocks}
+\end{align}
+The zero cross-group block follows from mutually exclusive membership,
+not from treating the shared $\gamma$ as known. Its inverse can have
+nonzero cross-group blocks.
+
+For a study likelihood coupling voxels, let $B_i$ have rows $b_{ij}^\top$,
+$s_i=\nabla_{\eta_i}\ell_i$, and $W_i=-\nabla_{\eta_i}^2\ell_i$.
+Then $U_i=B_i^\top s_i$ and $H_i=B_i^\top W_iB_i$.
+The matrix $W_i$ need not be diagonal.
+Yet a study involves only one $\beta_g$, so the same cross-group
+structural zeros remain. For aggregate NB, the factor is instead a
+group--voxel total; its full composite derivatives must be used.
+
+\section{Poisson likelihood and exact two-marginal compression}\label{sec:poisson}
+
+\subsection{Probability mass, score, and curvature}
+For independent cells,
+\begin{align}
+ \Pr(Y=y\mid\mu)&=e^{-\mu}\mu^y/y!,\\
+ \ell_{ij}&=Y_{ij}\eta_{ij}-e^{\eta_{ij}}-\log(Y_{ij}!),\\
+ s_{ij}&=Y_{ij}-\mu_{ij},&
+ w_{ij}&=\mu_{ij}. \label{eq:poisson-cell}
+\end{align}
+The score is the residual because $\partial_\eta e^\eta=e^\eta$;
+its derivative is $-\mu$ because the observed count is fixed.
+Consequently
+\begin{equation}
+ U=\sum_{i,j}b_{ij}(Y_{ij}-\mu_{ij}),\qquad
+ H=I=\sum_{i,j}\mu_{ij}b_{ij}b_{ij}^\top.
+\end{equation}
+For any $a$, $a^\top Ha=\sum_{ij}\mu_{ij}(b_{ij}^\top a)^2\geq0$.
+At finite positive means it is strictly positive for nonzero $a$
+exactly when the stacked regression design has no null direction.
+This proves convexity of the negative log likelihood, not existence
+of a finite minimizer in a data-poor design.
+
+\subsection{Compress the full likelihood without discarding covariate data}
+Define the two observed margins and two mean totals
+\begin{equation}
+ Y_{gj}=\sum_{i\in\mathcal I_g}Y_{ij},\quad
+ Y_{ti}=\sum_jY_{ij},\quad
+ h_g=\sum_j\mu_{gj}^X,\quad T_g=\sum_{i\in\mathcal I_g}\mu_i^Z.
+ \label{eq:margins}
+\end{equation}
+Separate each part of the cell sum:
+\begin{align}
+ \sum_{i,j}Y_{ij}x_j^\top\beta_{g(i)}
+ &=\sum_g Y_g^\top X\beta_g,\\
+ \sum_{i,j}Y_{ij}{Z_i}\gamma&=\sum_i Y_{ti} {Z_i}\gamma,\\
+ \sum_{i,j}\mu_{ij}
+ &=\sum_g\left(\sum_j\mu_{gj}^X\right)
+            \left(\sum_{i\in\mathcal I_g}\mu_i^Z\right)=\sum_gh_gT_g .
+\end{align}
+Thus, up to a parameter-independent data term,
+\begin{equation}
+ \ell_{\rm full}
+ =\sum_g Y_g^\top X\beta_g+\sum_i Y_{ti} {Z_i}\gamma
+       -\sum_gh_gT_g+c(Y). \label{eq:poisson-compressed}
+\end{equation}
+Both spatial totals $Y_g$ and study totals $Y_{ti}$ are retained.
+This is an exact compression of the \emph{full} Poisson likelihood.
+The factorial data term may be dropped for parameter optimization,
+but likelihood comparisons requiring absolute normalizations must
+keep track of which observation space is being used.
+
+\subsection{Differentiate the compressed form explicitly}
+Define
+\begin{align}
+ a_g&=X^\top \mu_g^X,&
+ B_g&=X^\top\diag(\mu_g^X)X,\\
+ t_g^{(z)}&=\sum_{i\in\mathcal I_g}\mu_i^Z{Z_i^\top},&
+ V_g&=\sum_{i\in\mathcal I_g}\mu_i^Z{Z_i^\top}{Z_i} .
+\end{align}
+Then $\nabla_{\beta_g}h_g=a_g$, $\nabla_{\beta_g}^2h_g=B_g$,
+$\nabla_\gamma T_g=t_g^{(z)}$, and $\nabla_\gamma^2T_g=V_g$.
+Differentiating \eqref{eq:poisson-compressed} once gives
+\begin{equation}
+ U_{\beta_g}=X^\top Y_g-T_ga_g,\qquad
+ U_\gamma=\sum_i Y_{ti}{Z_i^\top}-\sum_gh_gt_g^{(z)} .
+\end{equation}
+Differentiating again and negating gives
+\begin{equation}
+ D_g=T_gB_g,\qquad F_g=a_g(t_g^{(z)})^\top,\qquad
+ E=\sum_gh_gV_g . \label{eq:poisson-blocks}
+\end{equation}
+Here $D_g=H_{\beta_g\beta_g}$, $F_g=H_{\beta_g\gamma}$,
+and $E=H_{\gamma\gamma}$; $E$ is a matrix, whereas $\E$ is expectation.
+These formulas reproduce the cell sums without an $M\times N$ mean array.
+For example the $P\times R$ cross block comes from differentiating
+$-T_ga_g$ with respect to $\gamma$, not from an independence assumption.
+
+\subsection{The two expressions in paper Equation 6 need a qualification}
+Poisson closure says $Y_{gj}\sim\operatorname{Poisson}(\mu_{gj}^XT_g)$.
+The likelihood using \emph{only} these totals is
+\begin{equation}
+ \ell_{\rm totals}
+ =\sum_g Y_g^\top X\beta_g+\sum_g Y_{g\cdot}\log T_g-\sum_gh_gT_g+c_{\rm tot}(Y),
+ \qquad Y_{g\cdot}=\sum_{i\in\mathcal I_g}Y_{ti} .
+\end{equation}
+This corresponds to the totals-only first expression in paper Equation~6.
+The paper's later expression retaining study totals corresponds to
+\eqref{eq:poisson-compressed}. Subtraction exposes the distinction:
+\begin{equation}
+ \ell_{\rm full}-\ell_{\rm totals}
+ =\sum_g\sum_{i\in\mathcal I_g}Y_{ti}\log(\mu_i^Z/T_g)
+       +c(Y)-c_{\rm tot}(Y). \label{eq:allocation}
+\end{equation}
+Conditional on a voxel total, Poisson allocations across studies are
+multinomial with probabilities $\pi_{ig}=\mu_i^Z/T_g$.
+Indeed, dividing the product cell mass by the total mass gives
+$Y_{gj}!\prod_i\pi_{ig}^{Y_{ij}}/\prod_iY_{ij}!$.
+Summing its log over voxels gives exactly \eqref{eq:allocation}.
+
+For fixed $\gamma$, this difference is constant in $\beta$.
+Without estimated covariates it is also constant in the remaining
+regression parameters. In general it is not constant in estimated $\gamma$.
+Writing $\bar z_g=t_g^{(z)}/T_g$,
+\begin{align}
+ U_{{\rm alloc},g}&=\sum_{i\in\mathcal I_g}Y_{ti}{Z_i^\top}-Y_{g\cdot}\bar z_g,\\
+ H_{{\rm alloc},g}
+ &=Y_{g\cdot}\{V_g/T_g-\bar z_g\bar z_g^\top\}
+ =Y_{g\cdot}\Cov_{\pi_g}({Z_i^\top})\succeq0 .
+\end{align}
+Therefore Poisson closure does not justify blanket equivalence of
+totals-only and full likelihoods when covariate effects are estimated.
+The Poisson limit of the aggregate NB likelihood below is the totals-only
+likelihood, not automatically the full two-margin expression.
+
+\section{Independent NB cells as the basis of moment matching}\label{sec:cellnb}
+
+\subsection{NB2 convention and the underlying probability mass}
+Within group $g$, put $r=1/\alpha_g>0$.
+An independent gamma multiplier with shape and rate $r$ has mean one
+and variance $\alpha_g$. Mixing a Poisson mean $\mu$ by that multiplier
+gives
+\begin{equation}
+ p(y\mid\mu,r)=\frac{\Gamma(y+r)}{\Gamma(r)\Gamma(y+1)}
+       \left(\frac{r}{r+\mu}\right)^r
+       \left(\frac{\mu}{r+\mu}\right)^y,
+ \qquad \Var(Y)=\mu+\alpha_g\mu^2.
+ \label{eq:nb-pmf}
+\end{equation}
+The cells in this construction have independent multipliers, unlike
+the common study multiplier in Section~\ref{sec:cluster}.
+At fixed $r$, the scalar log likelihood is
+\begin{equation}
+ \ell=\log\Gamma(y+r)-\log\Gamma(r)-\log\Gamma(y+1)
+       +r\log r+y\eta-(y+r)\log(r+e^\eta).
+\end{equation}
+Retain the gamma terms if dispersion is differentiated.
+They are constant only during the regression step at fixed dispersion.
+
+\subsection{Scalar derivatives, information, and their limitations}
+First combine the score numerator:
+\begin{equation}
+ \ell_\eta=y-(y+r)\frac{\mu}{r+\mu}
+ =\frac{r(y-\mu)}{r+\mu}=\frac{y-\mu}{1+\alpha_g\mu}.
+\end{equation}
+The quotient rule now gives
+\begin{align}
+ \ell_{\eta\eta}
+ &=\frac{-\mu(1+\alpha_g\mu)-\alpha_g\mu(y-\mu)}
+                  {(1+\alpha_g\mu)^2}
+ =-\frac{\mu(1+\alpha_gy)}{(1+\alpha_g\mu)^2},\\
+ w^{\rm obs}&=\frac{\mu(1+\alpha_gy)}{(1+\alpha_g\mu)^2},&
+ w^{\rm F}&=\E w^{\rm obs}=\frac{\mu}{1+\alpha_g\mu}. \label{eq:nb-weights}
+\end{align}
+Also $\Var(\ell_\eta)=(\mu+\alpha_g\mu^2)/(1+\alpha_g\mu)^2=w^{\rm F}$.
+Substitution in \eqref{eq:cell-assembly}--\eqref{eq:group-blocks}
+gives all underlying independent-cell regression blocks.
+Their observed curvature is nonnegative at fixed $\alpha_g$,
+and both weights tend to $\mu$ as $\alpha_g\downarrow0$.
+The denominators contain cell means; simply replacing $Y_{ij}$ by
+$Y_{gj}$ does not produce the paper's moment-matched likelihood.
+This cell-level derivation identifies the original dispersion convention
+and clarifies why Poisson compression cannot be reused unaltered.
+
+\subsection{Shape derivatives for an optional joint cell-model calculation}
+Define $\psi=d\log\Gamma/dr$ and $\psi_1=d\psi/dr$.
+At fixed $\mu$ the exact derivatives are
+\begin{align}
+ \ell_r&=\psi(y+r)-\psi(r)+\log r+1-\log(r+\mu)-\frac{y+r}{r+\mu},\\
+ \ell_{rr}&=\psi_1(y+r)-\psi_1(r)+\frac1r-\frac1{r+\mu}
+                                  -\frac{\mu-y}{(r+\mu)^2},\\
+ \ell_{\eta r}&=\frac{\mu(y-\mu)}{(r+\mu)^2}.
+\end{align}
+Thus $H_{\vartheta r}=-\sum b_{ij}\ell_{\eta r}$ within the relevant group.
+Under this correctly specified cell model, $\E\ell_{\eta r}=0$.
+Observed cross information need not vanish. Neither that orthogonality
+nor fixed-dispersion convexity transfers automatically to the composed
+aggregate likelihood with $\gamma$-dependent shape.
+
+\section{Moment-matched aggregate NB: full composite differentiation}
+\label{sec:aggregate}
+
+\subsection{Match the mean and variance, not the entire distribution}
+Temporarily omit the fixed group label $g$:
+$Y_j=Y_{gj}$, $\mu_j=\mu_{gj}$, $\mu_j^X=\mu_{gj}^X$,
+$\alpha=\alpha_g$, $\alpha'=\alpha'_g$, and $p'_j=p'_{gj}$.
+The study index $i$ still ranges over $\mathcal I_g$.
+After deriving voxel-constant shape we write $r'=r'_g=r'_{gj}$.
+Let
+\begin{equation}
+ s_1=\sum_i \mu_i^Z,\qquad s_2=\sum_i(\mu_i^Z)^2,\qquad s_3=\sum_i(\mu_i^Z)^3.
+\end{equation}
+Independence of the original NB cells gives
+\begin{equation}
+ {\mu_j}=\E Y_j=\mu_j^Xs_1,\qquad
+ \Var(Y_j)=\mu_j^Xs_1+\alpha (\mu_j^X)^2s_2 .
+\end{equation}
+An NB variable of mean ${\mu_j}$ and shape ${r'}$ has variance
+${\mu_j}+{\mu_j}^2/{r'}$. Equating extra variances and cancelling $(\mu_j^X)^2$
+gives
+\begin{align}
+ {r'}&=\frac{s_1^2}{\alpha s_2},&
+ A&=\frac{s_1}{\alpha s_2}=\frac{{r'}}{s_1},\\
+ {p'}_j&=\frac{{\mu_j}}{{\mu_j}+{r'}}=\frac{\mu_j^X}{\mu_j^X+A},&
+ \alpha'&=\frac1{r'}=\frac{\alpha s_2}{s_1^2}.
+ \label{eq:matched-parameters}
+\end{align}
+Our ${p'}_j$ is the probability appearing as ${p'}_j^{Y_j}$ in the NB mass.
+These are paper Equations~7--8 specialized to its separable mean.
+The effective shape is constant over voxels within a group,
+but generally depends on $\gamma$.
+
+\paragraph{Recover the paper's primed parameters explicitly.}
+Define the extra variance
+$\Delta_{gj}=\alpha_g\sum_{i\in\mathcal I_g}\mu_{ij}^2$.
+Here $s_{kg}=\sum_{i\in\mathcal I_g}(\mu_i^Z)^k$ restores the
+group index suppressed in $s_k$.
+For an NB with count probability $p'$ and shape $r'$,
+$\mu=r'p'/(1-p')$ and
+$\Var(Y)=r'p'/(1-p')^2$. Subtracting its mean gives
+$\Var(Y)-\mu=\mu^2/r'$.
+Equating this to $\Delta_{gj}$ and then solving for $p'$ yields
+\begin{align}
+ r'_{gj}
+ &=\frac{\mu_{gj}^2}{\Delta_{gj}}
+   =\frac{(\mu_{gj}^X s_{1g})^2}
+           {\alpha_g(\mu_{gj}^X)^2s_{2g}}
+   =\frac{s_{1g}^2}{\alpha_gs_{2g}}=r'_g,\\
+ p'_{gj}
+ &=\frac{\mu_{gj}}{\mu_{gj}+r'_{gj}}
+   =\frac{\Delta_{gj}}{\mu_{gj}+\Delta_{gj}}
+   =\frac{\sum_{i\in\mathcal I_g}\mu_{ij}^2}
+           {\alpha_g^{-1}\mu_{gj}+\sum_{i\in\mathcal I_g}\mu_{ij}^2},\\
+ \alpha'_g
+ &=\frac{\Delta_{gj}}{\mu_{gj}^2}
+   =\frac{\alpha_gs_{2g}}{s_{1g}^2}=\frac1{r'_g}.
+ \label{eq:paper-prime-derivation}
+\end{align}
+This is a dimensionally complete derivation of the moment-matching
+relations in paper Equations~7--8, including the probability convention.
+Only the probability varies over voxels in this separable setup.
+The parameter $A_g=r'_g/s_{1g}$ is an additional helper introduced
+for differentiation, not a replacement for the paper's $r'_{gj}$
+or $\alpha'_g$.
+
+The generating function of an original cell is
+$(1+\alpha \mu_j^X\mu_i^Z(1-t))^{-1/\alpha}$.
+Its product over studies is generally not one NB generating function.
+If all $\mu_i^Z={\mu^Z}$, the probabilities are common and the product is
+$(1+\alpha \mu_j^X\mu^Z(1-t))^{-M_g/\alpha}$: the sum is exactly NB.
+More generally NB closure requires a common probability parameter.
+Here, with common original $\alpha$, equal positive $\mu_i^Z$ supplies it.
+
+To see what matching misses, the NB cumulant generating function is
+$K(t)=-\alpha^{-1}\log\{1-\alpha\mu(e^t-1)\}$.
+To show all three differentiations, put
+$D(t)=1-\alpha\mu(e^t-1)$, so $D'(t)=-\alpha\mu e^t$.
+The successive derivatives are
+\begin{align}
+ K'(t)&=\mu e^t/D(t),\\
+ K''(t)&=\mu e^t/D(t)+\alpha\mu^2e^{2t}/D(t)^2,\\
+ K'''(t)&=\mu e^t/D(t)+3\alpha\mu^2e^{2t}/D(t)^2
+                      +2\alpha^2\mu^3e^{3t}/D(t)^3.
+\end{align}
+Using $D(0)=1$ gives
+$K'''(0)=\mu+3\alpha\mu^2+2\alpha^2\mu^3$.
+Add the true independent cumulants and subtract the matched one:
+\begin{equation}
+ \kappa_3^{\rm true}-\kappa_3^{\rm matched}
+ =2\alpha^2(\mu_j^X)^3\left(s_3-\frac{s_2^2}{s_1}\right)\geq0.
+ \label{eq:third-cumulant}
+\end{equation}
+The inequality is Cauchy--Schwarz,
+$(\sum_i(\mu_i^Z)^2)^2\leq(\sum_i\mu_i^Z)(\sum_i(\mu_i^Z)^3)$.
+Equality for positive $\mu_i^Z$ requires equal $\mu_i^Z$.
+Moment matching is a working distribution, not a general convolution identity.
+
+\subsection{Rewrite paper Equation 9 before differentiating}
+Set $\eta_j=x_j^\top\beta$, $\mu_j^X=e^{\eta_j}$, $d_j=\mu_j^X+A$.
+Ignoring only count-factorial terms, the negative log likelihood is
+\begin{align}
+ \Psi(\eta,{r'},A)
+ ={}&-\sum_j\log\Gamma(Y_j+{r'})+N\log\Gamma({r'})-N{r'}\log A
+ \notag\\
+ &+\sum_j({r'}+Y_j)\log(\mu_j^X+A)-\sum_jY_j\eta_j .
+ \label{eq:Psi}
+\end{align}
+Indeed, $\log {p'}_j=\eta_j-\log d_j$ and
+$\log(1-{p'}_j)=\log A-\log d_j$.
+First treat $(\eta,{r'},A)$ as independent coordinates.
+Only afterwards substitute ${r'}(\gamma,\alpha)$ and $A(\gamma,\alpha)$.
+This order keeps the nonlinear inner-map curvature visible.
+
+\subsection{All outer first and second partial derivatives}
+At fixed ${r'},A$,
+\begin{align}
+ \Psi_{\eta_j}&=({r'}+Y_j)\frac{\mu_j^X}{d_j}-Y_j,\\
+ \partial_{\eta_j}(\mu_j^X/d_j)&=\frac{\mu_j^Xd_j-(\mu_j^X)^2}{d_j^2}
+                                  =\frac{\mu_j^XA}{d_j^2},\\
+ \Psi_{\eta_j\eta_j}&=\frac{({r'}+Y_j)\mu_j^XA}{d_j^2}=w_j,&
+ \Psi_{\eta_j\eta_k}&=0\quad(j\ne k),\\
+ \Psi_{\eta_j{r'}}&=\frac{\mu_j^X}{d_j},&
+ \Psi_{\eta_j A}&=-\frac{({r'}+Y_j)\mu_j^X}{d_j^2}. \label{eq:Psi-spatial}
+\end{align}
+The shape and scale derivatives are
+\begin{align}
+ \Psi_{r'}&=-\sum_j\psi(Y_j+{r'})+N\psi({r'})
+                         -N\log A+\sum_j\log d_j,\\
+ \Psi_A&=-N{r'}/A+\sum_j({r'}+Y_j)/d_j,\\
+ \Psi_{{r'}{r'}}&=-\sum_j\psi_1(Y_j+{r'})+N\psi_1({r'}),\\
+ \Psi_{{r'} A}&=-N/A+\sum_jd_j^{-1},\\
+ \Psi_{AA}&=N{r'}/A^2-\sum_j({r'}+Y_j)/d_j^2. \label{eq:Psi-outer}
+\end{align}
+For instance $\partial_A(-N{r'}/A)=N{r'}/A^2$,
+whereas differentiating each reciprocal $d_j^{-1}$ contributes a minus.
+Together \eqref{eq:Psi-spatial}--\eqref{eq:Psi-outer} specify every
+first and second outer derivative; omitted off-diagonal $\eta$ entries
+are zero, and reversed mixed entries follow by symmetry.
+
+\subsection{Inner gradients and Hessians: the factors two and four}
+All derivatives in this subsection are with respect to $\gamma$,
+holding the \emph{original} $\alpha$ fixed.
+Since $\mu_i^Z=\exp({Z_i}\gamma)$,
+\begin{equation}
+ \nabla \mu_i^Z=\mu_i^Z{Z_i^\top},\quad \nabla^2\mu_i^Z=\mu_i^Z{Z_i^\top}{Z_i},\quad
+ \nabla((\mu_i^Z)^2)=2(\mu_i^Z)^2{Z_i^\top},\quad \nabla^2((\mu_i^Z)^2)=4(\mu_i^Z)^2{Z_i^\top}{Z_i}.
+\end{equation}
+Define $b_k=\sum_i(\mu_i^Z)^k{Z_i^\top}$ and $C_k=\sum_i(\mu_i^Z)^k{Z_i^\top}{Z_i}$,
+for $k=1,2$. Then
+\begin{align}
+ \nabla s_1&=b_1,&\nabla^2s_1&=C_1,&
+ \nabla s_2&=2b_2,&\nabla^2s_2&=4C_2 .
+\end{align}
+Apply $\nabla^2\log s=s^{-1}\nabla^2s-s^{-2}\nabla s\nabla s^\top$:
+\begin{align}
+ l&=\nabla\log s_1=b_1/s_1,&
+ L_1&=\nabla^2\log s_1=C_1/s_1-b_1b_1^\top/s_1^2,\\
+ h&=\nabla\log s_2=2b_2/s_2,&
+ L_2&=\nabla^2\log s_2=4C_2/s_2-4b_2b_2^\top/s_2^2 .
+\end{align}
+With $q=\log{r'}$ and $a=\log A$,
+\begin{align}
+ q&=2\log s_1-\log s_2-\log\alpha,&
+ d_q=\nabla q&=2l-h,&Q_q=\nabla^2q&=2L_1-L_2,\\
+ a&=\log s_1-\log s_2-\log\alpha,&
+ d_a=\nabla a&=l-h,&Q_a=\nabla^2a&=L_1-L_2 .
+ \label{eq:log-inner}
+\end{align}
+Finally differentiation of $e^q$ and $e^a$ gives
+\begin{align}
+ r_\gamma:=\nabla{r'}&={r'} d_q,&
+ R_\gamma:=\nabla^2{r'}&={r'}(d_qd_q^\top+Q_q),\\
+ a_\gamma:=\nabla A&=A d_a,&
+ A_\gamma:=\nabla^2A&=A(d_ad_a^\top+Q_a).
+ \label{eq:inner}
+\end{align}
+The capital $R_\gamma$ here is a Hessian, not the scalar number $R$.
+The outer-product terms arise from differentiating the exponential
+prefactor and must not be discarded.
+
+\subsection{The complete regression score and group blocks}
+The spatial score and information are immediately
+\begin{equation}
+ U_\beta=-X^\top\Psi_\eta,\qquad
+ D=X^\top\diag(w)X.
+\end{equation}
+For a global component $a$, write
+$r'_a=\partial r'/\partial\gamma_a$,
+$A_a=\partial A/\partial\gamma_a$, and use two component indices
+for the corresponding second derivatives. Then
+$\partial_{\gamma_a}\Psi=\Psi_{r'}{r'}_a+\Psi_AA_a$.
+Differentiating each product with respect to $\gamma_b$ gives
+\begin{align}
+ \partial_{\gamma_b}(\Psi_{r'}{r'}_a)
+ &=\Psi_{{r'}{r'}}{r'}_b{r'}_a+\Psi_{{r'} A}A_b{r'}_a
+                                  +\Psi_{r'}{r'}_{ab},\\
+ \partial_{\gamma_b}(\Psi_AA_a)
+ &=\Psi_{{r'} A}{r'}_bA_a+\Psi_{AA}A_bA_a+\Psi_AA_{ab}.
+\end{align}
+Thus the group contribution to the global score and Hessian is
+\begin{align}
+ U_{\gamma,g}&=-\Psi_{r'} r_\gamma-\Psi_Aa_\gamma,\\
+ E_g&=\Psi_{{r'}{r'}}r_\gamma r_\gamma^\top
+   +\Psi_{{r'} A}(r_\gamma a_\gamma^\top+a_\gamma r_\gamma^\top)
+   +\Psi_{AA}a_\gamma a_\gamma^\top
+   +\Psi_{r'} R_\gamma+\Psi_A A_\gamma . \label{eq:aggregate-global}
+\end{align}
+The mixed spatial/global block is
+\begin{equation}
+ F_g=\sum_jx_j\left\{\frac{\mu_j^X}{d_j}r_\gamma^\top
+                 -\frac{({r'}+Y_j)\mu_j^X}{d_j^2}a_\gamma^\top\right\}.
+ \label{eq:aggregate-cross}
+\end{equation}
+Restore the group subscripts on all inner quantities, set
+$D=\blkdiag(D_1,\ldots,D_G)$, stack $F_g$, and sum $E=\sum_gE_g$.
+Likewise $U_\gamma=\sum_gU_{\gamma,g}$.
+This accounts for every regression derivative at fixed original
+$\alpha_1,\ldots,\alpha_G$.
+
+In particular $\Psi_{r'} R_\gamma+\Psi_AA_\gamma$ does not vanish
+merely because the composite score is zero.
+An optimum imposes the available parameter score equations, not
+independent optimization over unconstrained ${r'}$ and $A$ for every group.
+Discarding these terms is a curvature approximation, not this Hessian.
+
+\subsection{Holding effective dispersion fixed is a different operation}
+Paper Equations~8--9 introduce effective dispersion $\alpha'$.
+Its use as an optimization coordinate must be distinguished from
+holding original $\alpha$ fixed in \eqref{eq:log-inner}.
+If $\alpha'$ is held fixed, then
+\begin{equation}
+ q=-\log\alpha',\quad a=q-\log s_1,\quad
+ d_q=0,\ Q_q=0,\ d_a=-l,\ Q_a=-L_1 .
+ \label{eq:effective-fixed}
+\end{equation}
+These derivatives differ from \eqref{eq:log-inner}.
+The matched mean is still $\mu_j^Xs_1$, but the shape no longer changes with
+$\gamma$ during that partial update.
+Because $\alpha'=\alpha s_2/s_1^2$, a joint, unconstrained positive
+dispersion parameterization can describe the same matched distributions.
+However, a fixed-dispersion regression slice, an alternating update path,
+and a conditional information block depend on which coordinate is held.
+Joint covariance of the common regression coordinates is invariant under
+a smooth nuisance reparameterization when transformed consistently
+on identified coordinates where that covariance exists.
+
+\paragraph{Direct Hessian in the paper's effective-dispersion coordinate.}
+At fixed $\alpha'$, the aggregate log mean is
+$\widetilde\eta_j=x_j^\top\beta+\log s_1$, not an affine function
+of $\gamma$. Define
+\[
+ \widetilde s_j=\frac{Y_j-\mu_j}{1+\alpha'\mu_j},\qquad
+ w_j=\frac{\mu_j(1+\alpha'Y_j)}{(1+\alpha'\mu_j)^2}.
+\]
+The tilde distinguishes these scores from the study moment sums $s_1,s_2$;
+write $\widetilde s=(\widetilde s_j)_j$ and $w=(w_j)_j$ below.
+The derivatives of the predictor are
+$\nabla_\beta\widetilde\eta_j=x_j$,
+$\nabla_\gamma\widetilde\eta_j=l$, and
+$\nabla_\gamma^2\widetilde\eta_j=L_1$.
+Applying the full composite rule gives the group contributions
+\begin{align}
+ U_\beta&=X^\top\widetilde s,& U_{\gamma,g}&=l\sum_j\widetilde s_j,\\
+ D_g&=X^\top\diag(w)X,& F_g&=(X^\top w)l^\top,\\
+ E_g&=\left(\sum_jw_j\right)ll^\top-\left(\sum_j\widetilde s_j\right)L_1.
+ \label{eq:effective-direct}
+\end{align}
+In the last line, $-\sum_j\widetilde s_jL_1$ comes from
+$-\ell_{\widetilde\eta_j}\nabla_\gamma^2\widetilde\eta_j$.
+Dropping it away from a zero spatial-intercept score is not the
+observed Hessian. These formulas are the direct reduction of the
+outer/inner calculation with \eqref{eq:effective-fixed}.
+
+\subsection{An identification consequence of using only matched totals}
+\label{sec:aggregate-identification}
+Suppose the spatial basis contains a freely fitted intercept
+$Xc_B=\mathbf1_N$. For any two covariate vectors $\gamma$ and
+$\widetilde\gamma$, set
+\[
+ \widetilde\beta_g=\beta_g+
+   \log\!\left\{\frac{s_{1g}(\gamma)}
+                      {s_{1g}(\widetilde\gamma)}\right\}c_B,
+ \qquad \widetilde\alpha'_g=\alpha'_g.
+\]
+Then
+\begin{align}
+ \widetilde\mu_{gj}
+ &=\exp(x_j^\top\widetilde\beta_g)s_{1g}(\widetilde\gamma)
+   =\exp(x_j^\top\beta_g)s_{1g}(\gamma)=\mu_{gj},\\
+ \widetilde r'_{gj}&=1/\widetilde\alpha'_g=r'_{gj}.
+\end{align}
+Every factor in the matched-totals likelihood is unchanged.
+Consequently, these totals alone do not identify the shared
+$\gamma$ separately from freely fitted group intercepts, even
+when the study design has full rank and varies within groups.
+This invariance holds with effective dispersion fixed or freely
+estimated. With original dispersion freely estimated, the same
+invariance uses
+\[
+ \widetilde\alpha_g
+  =\alpha'_g\,\frac{s_{1g}(\widetilde\gamma)^2}
+                       {s_{2g}(\widetilde\gamma)}.
+\]
+It need not preserve a \emph{fixed original} $\alpha_g$; shape
+variation can then carry additional information.
+
+The singular curvature is also visible directly.
+In \eqref{eq:effective-direct}, $D_gc_B=X^\top w$, so
+$F_g=D_gc_Bl^\top$. At a spatial-intercept stationary point,
+$0=c_B^\top U_\beta=\sum_j\widetilde s_j$ and hence
+\[
+ E_g=\left(\sum_jw_j\right)ll^\top
+     =F_g^\top D_g^{-1}F_g.
+\]
+Summing over groups gives $\mathcal S=0$ for the covariate border
+when each $D_g$ is invertible. Under the matched law the same
+cancellation holds for expected information because $\E\widetilde s_j=0$.
+Thus a positive-definite full regression inverse cannot be assumed
+for this unrestricted totals-only setup.
+
+This is a consequence of the observation model written in
+paper Equation~9, not an assertion about an implementation that
+also retains study-level allocation information.
+The full two-margin Poisson and full clustered likelihoods retain
+that information; the totals-only matched NB likelihood does not.
+Scientifically specified restrictions or additional data can change
+identifiability. A numerical ridge, or a roughness penalty that
+leaves constant maps unpenalized, does not establish identification
+from the original totals likelihood.
+
+\subsection{Expected information under the matched distribution}
+If the matched NB law is itself assumed, the outer scores have mean zero.
+In particular $\E\Psi_{r'}=\E\Psi_A=0$, so inner-map curvature terms
+drop \emph{in expectation}. At ${\mu_j}={r'} \mu_j^X/A$ the necessary expectations are
+\begin{align}
+ \E w_j&=({r'}+{\mu_j})\mu_j^XA/d_j^2={r'} \mu_j^X/d_j,\\
+ \E\Psi_{{r'}{r'}}&=N\psi_1({r'})-\sum_j\E\{\psi_1(Y_j+{r'})\},\\
+ \E\Psi_{{r'} A}&=-N/A+\sum_jd_j^{-1},\\
+ \E\Psi_{AA}&=N{r'}/A^2-\sum_j({r'}+{\mu_j})/d_j^2,\\
+ \E\Psi_{\eta_j{r'}}&=\mu_j^X/d_j,&
+ \E\Psi_{\eta_j A}&=-({r'}+{\mu_j})\mu_j^X/d_j^2.
+\end{align}
+Insert these into \eqref{eq:aggregate-global}--\eqref{eq:aggregate-cross}.
+The trigamma expectation is an NB-weighted sum over nonnegative counts;
+it cannot generally be replaced by $\psi_1({\mu_j}+{r'})$.
+
+Under the \emph{original} unequal-probability independent-cell sums,
+the first two moments agree, but the expected digamma in the shape score
+need not agree. Thus the matched shape score need not be centered under
+the original distribution. Since ${r'}$ depends on $\gamma$ at fixed
+original dispersion, the matched global regression score need not be
+centered at the original parameter either.
+An exact working Hessian does not resolve this possible change of target.
+A robust variance, when justified, quantifies a working estimator's
+variability; it does not automatically remove approximation bias.
+
+\subsection{Stable log coordinates and exact recurrence checks}
+Let $t_j=\eta_j-a$, ${p'}_j=(1+e^{-t_j})^{-1}$,
+$\bar {p'}_j=1-{p'}_j$. Then \eqref{eq:Psi} becomes
+\begin{equation}
+ \Psi=-\sum_j\log\Gamma(Y_j+{r'})+N\log\Gamma({r'})
+       +\sum_j({r'}+Y_j)\softplus(t_j)-\sum_jY_jt_j .
+\end{equation}
+Use $\softplus(t)=\max(t,0)+\log(1+e^{-|t|})$ for evaluation.
+In coordinates $(\eta,q,a)$, direct differentiation gives
+\begin{align}
+ \Psi_a&=\sum_j\{Y_j-({r'}+Y_j){p'}_j\},\\
+ \Psi_{aa}&=\sum_jw_j,\quad w_j=({r'}+Y_j){p'}_j\bar {p'}_j,\\
+ \Psi_q&={r'}\left\{\sum_j\softplus(t_j)
+                  -\sum_j[\psi(Y_j+{r'})-\psi({r'})]\right\},\\
+ \Psi_{qa}&=-{r'}\sum_j{p'}_j,\\
+ \Psi_{qq}&=\Psi_q+{r'}^2\sum_j\{\psi_1({r'})-\psi_1(Y_j+{r'})\},\\
+ \Psi_{\eta_jq}&={r'} {p'}_j,\qquad\Psi_{\eta_ja}=-w_j .
+\end{align}
+In particular $\partial_q({r'}\Psi_{r'})=\Psi_q+{r'}^2\Psi_{{r'}{r'}}$:
+the first derivative appears again through reparameterization.
+An equivalent form of the regression blocks is
+\begin{align}
+ F_g&=X^\top({r'}p')d_q^\top-X^\top w\,d_a^\top,\\
+ E_g&=\Psi_{qq}d_qd_q^\top+
+       \Psi_{qa}(d_qd_a^\top+d_ad_q^\top)+\Psi_{aa}d_ad_a^\top
+       +\Psi_qQ_q+\Psi_aQ_a . \label{eq:log-composition}
+\end{align}
+This is a rearrangement, not a smaller-term Hessian approximation.
+For integer $y\geq0$, gamma recurrence yields exact finite sums
+\begin{align}
+ \log\Gamma({r'}+y)-\log\Gamma({r'})&=\sum_{k=0}^{y-1}\log({r'}+k),\\
+ \psi({r'}+y)-\psi({r'})&=\sum_{k=0}^{y-1}({r'}+k)^{-1},\\
+ \psi_1({r'})-\psi_1({r'}+y)&=\sum_{k=0}^{y-1}({r'}+k)^{-2}.
+\end{align}
+Empty sums are zero. These provide manual checks and can avoid subtracting
+nearby special-function values. Log-sum-exp evaluation of
+$\log s_1$ and $\log s_2$ likewise avoids overflowing the $\mu_i^Z$.
+
+\subsection{Explicit optional log-dispersion blocks}
+For a joint matched-model calculation let $\delta=\log\alpha$ in one group.
+Then $q_\delta=a_\delta=-1$ and
+$q_{\gamma\delta}=a_{\gamma\delta}=q_{\delta\delta}=a_{\delta\delta}=0$.
+The complete additional negative-log-likelihood derivatives are
+\begin{align}
+ \Psi_\delta&=-\Psi_q-\Psi_a,\\
+ H_{\delta\delta}&=\Psi_{qq}+2\Psi_{qa}+\Psi_{aa},\\
+ H_{\gamma\delta}
+ &=-(\Psi_{qq}+\Psi_{qa})d_q-(\Psi_{qa}+\Psi_{aa})d_a,\\
+ H_{\beta\delta}&=-X^\top({r'}p')+X^\top w .
+ \label{eq:aggregate-dispersion}
+\end{align}
+Different group dispersions have no direct cross derivatives.
+The regression blocks remain \eqref{eq:log-composition}, including
+their inner curvature terms. For effective log dispersion
+$\delta'=\log\alpha'$, the same outer formulas hold but with the inner
+derivatives \eqref{eq:effective-fixed}.
+These formulas state both joint parameterizations without silently
+changing what ``fixed dispersion'' means.
+
+\section{Clustered NB: integrate the shared study multiplier}\label{sec:cluster}
+
+\subsection{Gamma integral and full covariance}
+For $i\in\mathcal I_g$, put $\nu=\nu_g=1/\alpha_g$ and assume
+\begin{equation}
+ \lambda_i\sim\operatorname{Gamma}(\text{shape }\nu,\text{rate }\nu),
+ \qquad Y_{ij}\mid\lambda_i\ \text{independent Poisson}(\lambda_i\mu_{ij}).
+\end{equation}
+Different studies have independent multipliers.
+Let $Y_{ti}=\sum_jY_{ij}$ and ${\mu_{ti}}=\sum_j\mu_{ij}=\mu_i^Zh_g$.
+Multiply the conditional mass by the gamma density and integrate:
+\begin{align}
+ p(Y_i)&=\frac{\nu^\nu\prod_j\mu_{ij}^{Y_{ij}}}
+                   {\Gamma(\nu)\prod_jY_{ij}!}
+       \int_0^\infty \lambda^{Y_{ti}+\nu-1}e^{-({\mu_{ti}}+\nu)\lambda}\,d\lambda\\
+ &=\frac{\Gamma(Y_{ti}+\nu)}{\Gamma(\nu)}
+       \frac{\nu^\nu}{({\mu_{ti}}+\nu)^{Y_{ti}+\nu}}
+       \prod_j\frac{\mu_{ij}^{Y_{ij}}}{Y_{ij}!}. \label{eq:cluster-mass}
+\end{align}
+The gamma integral is
+$\int_0^\infty x^{a-1}e^{-bx}\,dx=\Gamma(a)b^{-a}$, $a,b>0$.
+Its log is
+\begin{equation}
+ \ell_i=\log\Gamma(Y_{ti}+\nu)-\log\Gamma(\nu)+\nu\log\nu
+ -(Y_{ti}+\nu)\log({\mu_{ti}}+\nu)+\sum_jY_{ij}\eta_{ij}
+ -\sum_j\log(Y_{ij}!). \label{eq:cluster-ll}
+\end{equation}
+Summing \eqref{eq:cluster-ll} and using both data margins recovers
+paper Equation~11 up to data-only factorials.
+
+The law of total covariance gives, including diagonal entries,
+\begin{align}
+ \Cov(Y_{ij},Y_{ik})
+ &=\E\{\Cov(Y_{ij},Y_{ik}\mid\lambda_i)\}
+   +\Cov(\lambda_i\mu_{ij},\lambda_i\mu_{ik})\\
+ &=\mathbf1_{\{j=k\}}\mu_{ij}+\alpha_g\mu_{ij}\mu_{ik},\\
+ \Var(Y_i)&=\diag(\mu_i)+\alpha_g\mu_i\mu_i^\top . \label{eq:cluster-variance}
+\end{align}
+For distinct voxels this reduces to paper Equation~10.
+Different studies have zero covariance under the model.
+The diagonal is $\mu_{ij}+\alpha_g\mu_{ij}^2$, not just
+$\alpha_g\mu_{ij}^2$. Also $\Var(Y_{ti})={\mu_{ti}}+\alpha_g{\mu_{ti}}^2$.
+This construction captures shared study fluctuation; it does not introduce
+an additional independent voxel-level overdispersion component.
+
+\subsection{Exact factorization into a study total and spatial allocation}
+Conditional on $\lambda_i$, the total has law
+$Y_{ti}\mid\lambda_i\sim\operatorname{Poisson}(\lambda_i\mu_{ti})$.
+The same gamma integral, now applied to this single count, gives
+\[
+ p(Y_{ti})=
+ \frac{\Gamma(Y_{ti}+\nu)}{\Gamma(\nu)Y_{ti}!}
+ \frac{\nu^\nu\mu_{ti}^{Y_{ti}}}{(\mu_{ti}+\nu)^{Y_{ti}+\nu}}.
+\]
+Thus $Y_{ti}$ is exactly NB with mean $\mu_{ti}$ and shape $\nu$.
+For a fixed total the independent conditional Poisson counts have
+multinomial probabilities
+\[
+ \pi_{ij}=\frac{\lambda_i\mu_{ij}}{\lambda_i\mu_{ti}}
+         =\frac{\mu_{ij}}{\mu_{ti}}
+         =\frac{\mu_{gj}^X}{h_g},\qquad g=g(i).
+\]
+The multiplier cancels, so integrating it does not change this
+conditional multinomial distribution. Multiplying the two masses,
+\begin{align}
+ p(Y_i)
+ &=p(Y_{ti})\,\frac{Y_{ti}!}{\prod_jY_{ij}!}
+                     \prod_j\left(\frac{\mu_{ij}}{\mu_{ti}}\right)^{Y_{ij}}
+ \notag\\
+ &=\frac{\Gamma(Y_{ti}+\nu)}{\Gamma(\nu)}
+   \frac{\nu^\nu}{(\mu_{ti}+\nu)^{Y_{ti}+\nu}}
+   \prod_j\frac{\mu_{ij}^{Y_{ij}}}{Y_{ij}!}.
+\end{align}
+The factorial $Y_{ti}!$ and the power
+$\mu_{ti}^{Y_{ti}-\sum_jY_{ij}}=1$ cancel explicitly, reproducing
+\eqref{eq:cluster-mass}. Unlike the independent-cell sum in
+Section~\ref{sec:aggregate}, this factorization uses no moment
+approximation.
+
+It also separates the sources of regression information.
+Let $a_g=X^\top\mu_g^X$ as above. Then
+\[
+ \nabla_{\beta_g}\log\mu_{ti}=a_g/h_g,\qquad
+ \nabla_\gamma\log\mu_{ti}=Z_i^\top.
+\]
+The NB total score on its log-mean scale is
+$u_{ti}=(Y_{ti}-\mu_{ti})/(1+\alpha_g\mu_{ti})$.
+The conditional allocation log likelihood, apart from data terms, is
+$Y_i^\top X\beta_g-Y_{ti}\log h_g$.
+Its spatial score is $X^\top Y_i-Y_{ti}a_g/h_g$, and its $\gamma$
+score is zero. Combining total and allocation scores gives
+\begin{align}
+ U_{\beta_g,i}
+ &=X^\top Y_i+(u_{ti}-Y_{ti})a_g/h_g
+   =X^\top Y_i-c_i\mu_i^Z a_g,\\
+ U_{\gamma,i}
+ &=u_{ti}Z_i^\top=(Y_{ti}-c_i\mu_{ti})Z_i^\top,
+ \qquad c_i=\frac{Y_{ti}+\nu_g}{\mu_{ti}+\nu_g}.
+\end{align}
+The cancellation follows from
+$u_{ti}-Y_{ti}=-\mu_{ti}(Y_{ti}+\nu_g)/(\mu_{ti}+\nu_g)$.
+The total captures the constant study effect, while conditional
+allocation captures the normalized spatial shape.
+
+\subsection{Study score and observed information on the log-mean scale}
+At fixed $\nu$, define $c_i=(Y_{ti}+\nu)/({\mu_{ti}}+\nu)$.
+Since $\partial {\mu_{ti}}/\partial\eta_{ij}=\mu_{ij}$,
+\begin{equation}
+ s_{ij}=\frac{\partial\ell_i}{\partial\eta_{ij}}
+          =Y_{ij}-c_i\mu_{ij}.
+\end{equation}
+For any voxel $k$,
+$\partial c_i/\partial\eta_{ik}=-c_i\mu_{ik}/({\mu_{ti}}+\nu)$.
+The product rule therefore gives
+\begin{align}
+ -\frac{\partial s_{ij}}{\partial\eta_{ik}}
+ &=c_i\mathbf1_{\{j=k\}}\mu_{ij}
+              -\frac{c_i\mu_{ij}\mu_{ik}}{{\mu_{ti}}+\nu},\\
+ W_i^{\rm obs}
+ &=c_i\left\{\diag(\mu_i)-\frac{\mu_i\mu_i^\top}{{\mu_{ti}}+\nu}\right\}.
+ \label{eq:cluster-W}
+\end{align}
+The second term is a rank-one correction, not a diagonal NB weight.
+For $a\ne0$, weighted Cauchy--Schwarz gives
+$(\sum_j\mu_{ij}a_j)^2\leq {\mu_{ti}}\sum_j\mu_{ij}a_j^2$, hence
+\begin{equation}
+ a^\top W_i^{\rm obs}a
+ \geq c_i\frac{\nu}{{\mu_{ti}}+\nu}\sum_j\mu_{ij}a_j^2>0 .
+\end{equation}
+Thus the study log-mean curvature is positive definite at finite positive
+means and $\nu>0$. Projection can still lose rank through the design.
+Since $\E Y_{ti}={\mu_{ti}}$, $\E c_i=1$, giving
+\begin{equation}
+ W_i^{\rm F}=\diag(\mu_i)-\frac{\mu_i\mu_i^\top}{{\mu_{ti}}+\nu}.
+\end{equation}
+These weights and scores tend to the Poisson ones as $\nu\to\infty$.
+The positive curvature establishes fixed-dispersion convexity only.
+
+\subsection{Project to the paper's group and global coefficients}
+Use $h_g$, $a_g=X^\top \mu_g^X$, and $B_g=X^\top\diag(\mu_g^X)X$
+from the Poisson calculation.
+The study's nonlinear negative-log term is
+\begin{equation}
+ f_i(t)=(Y_{ti}+\nu_g)\log(t+\nu_g),\quad
+ f_i'(t)=c_i,\quad f_i''(t)=-\frac{c_i}{t+\nu_g}.
+\end{equation}
+The total ${\mu_{ti}}=\mu_i^Zh_g$ satisfies
+\begin{align}
+ \nabla_{\beta_g}{\mu_{ti}}&=\mu_i^Za_g,&
+ \nabla_{\beta_g}^2{\mu_{ti}}&=\mu_i^ZB_g,\\
+ \nabla_\gamma {\mu_{ti}}&={\mu_{ti}}{Z_i^\top},&
+ \nabla_\gamma^2{\mu_{ti}}&={\mu_{ti}}{Z_i^\top}{Z_i},&
+ \nabla_{\beta_g\gamma}^2{\mu_{ti}}&=\mu_i^Za_g{Z_i}.
+\end{align}
+The elementary composite rule is
+$\nabla^2 f(t)=f'(t)\nabla^2t+f''(t)\nabla t\nabla t^\top$.
+If $f$ is instead viewed as a function of $h_g$, its spatial block
+is exactly $f_h' B_g+f_h''a_ga_g^\top$, with
+$f_h'=c_i\mu_i^Z$ and $f_h''=-c_i(\mu_i^Z)^2/({\mu_{ti}}+\nu_g)$.
+Thus the full study contributions are
+\begin{align}
+ D_{g,i}&=c_i\mu_i^ZB_g-\frac{c_i(\mu_i^Z)^2}{{\mu_{ti}}+\nu_g}a_ga_g^\top,\\
+ F_{g,i}&=c_i\mu_i^Za_g{Z_i}-
+       \frac{c_i\mu_i^Z{\mu_{ti}}}{{\mu_{ti}}+\nu_g}a_g{Z_i}
+       =\frac{c_i\mu_i^Z\nu_g}{{\mu_{ti}}+\nu_g}a_g{Z_i},\\
+ E_i&=c_i{\mu_{ti}}{Z_i^\top}{Z_i}-
+       \frac{c_i{\mu_{ti}}^2}{{\mu_{ti}}+\nu_g}{Z_i^\top}{Z_i}
+       =\frac{c_i{\mu_{ti}}\nu_g}{{\mu_{ti}}+\nu_g}{Z_i^\top}{Z_i} . \label{eq:cluster-blocks}
+\end{align}
+The scores, retaining the data terms, are
+\begin{equation}
+ U_{\beta_g,i}=X^\top Y_i-c_i\mu_i^Za_g,\qquad
+ U_{\gamma,i}=(Y_{ti}-c_i{\mu_{ti}}){Z_i^\top} .
+\end{equation}
+Sum $D_{g,i},F_{g,i}$ over studies in group $g$ and $E_i$ over all studies.
+Replace $c_i$ by one for expected information.
+No spatially varying moderator design has been introduced.
+The two data margins suffice for the total likelihood and derivatives
+at fixed dispersion; a study-level robust calculation also needs
+the individual study projections $X^\top Y_i$.
+
+\subsection{Cluster shape and log-dispersion derivatives}
+Differentiate \eqref{eq:cluster-ll} at fixed ${\mu_{ti}}$:
+\begin{align}
+ \ell_{i,\nu}&=\psi(Y_{ti}+\nu)-\psi(\nu)+\log\nu+1
+                 -\log({\mu_{ti}}+\nu)-\frac{Y_{ti}+\nu}{{\mu_{ti}}+\nu},\\
+ \ell_{i,\nu\nu}&=\psi_1(Y_{ti}+\nu)-\psi_1(\nu)+\frac1\nu
+              -\frac1{{\mu_{ti}}+\nu}-\frac{{\mu_{ti}}-Y_{ti}}{({\mu_{ti}}+\nu)^2},\\
+ \ell_{i,\eta_{ij}\nu}
+ &=\frac{\mu_{ij}(Y_{ti}-{\mu_{ti}})}{({\mu_{ti}}+\nu)^2}.
+\end{align}
+The last derivative follows from differentiating $-c_i\mu_{ij}$.
+For $\delta_g=\log\alpha_g$ and $\nu_g=e^{-\delta_g}$,
+\begin{align}
+ \ell_{\delta_g}&=-\nu_g\ell_{\nu_g},&
+ \ell_{\delta_g\delta_g}&=\nu_g^2\ell_{\nu_g\nu_g}
+                                      +\nu_g\ell_{\nu_g},\\
+ \ell_{\vartheta\delta_g}&=-\nu_g\ell_{\vartheta\nu_g}. \label{eq:logdisp-chain}
+\end{align}
+Study derivatives are summed within the group before joint blocks are
+formed. At a regular group shape optimum $\ell_{\nu_g}=0$,
+but the extra score term in \eqref{eq:logdisp-chain} cannot be omitted
+away from it. Expected shape/regression cross information is zero
+for the correctly specified clustered model because $\E(Y_{ti}-{\mu_{ti}})=0$.
+That fact need not hold for a misspecified distribution or observed Hessian.
+
+\section{Optimization, fixed slices, and nuisance adjustment}\label{sec:optimization}
+
+\subsection{Interpret Algorithm 1 as joint estimation by alternating updates}
+The paper initializes the overdispersed fits from a Poisson solution
+and alternates dispersion updates with regression updates using L-BFGS.
+Mathematically, for a negative log likelihood $L(\vartheta,\delta)$,
+one cycle takes the schematic form
+\begin{equation}
+ \delta^{(k+1)}\approx\arg\min_\delta L(\vartheta^{(k)},\delta),\qquad
+ \vartheta^{(k+1)}\approx\arg\min_\vartheta L(\vartheta,\delta^{(k+1)}).
+\end{equation}
+Separate subproblems do not mean the final dispersion was externally known.
+Check the full score, objective progress, and sensitivity to initialization.
+Small objective changes alone can reflect a stalled or poorly scaled fit.
+L-BFGS's limited-memory curvature approximation is an optimization device,
+not automatically the observed-information covariance used for inference.
+
+Poisson, underlying independent NB, and clustered NB have convex
+negative log likelihood in the affine regression coefficients at fixed
+dispersion, as proved above. This does not imply joint convexity in
+regression and dispersion, nor convexity of the matched NB composition
+at fixed original dispersion. It also does not guarantee numerical
+convergence, full rank, or a finite estimate.
+These distinctions refine, rather than replace, the paper's caution
+about fitting its overdispersed models.
+
+\subsection{Joint versus fixed-dispersion regression covariance}
+Let $\delta=(\log\alpha_1,\ldots,\log\alpha_G)^\top$ and partition a
+joint observed or expected information matrix in auxiliary coordinate
+order $(\vartheta,\delta)$ as
+\begin{equation}
+ \mathcal H=\begin{pmatrix}
+ H_{\vartheta\vartheta}&\mathcal B\\
+ \mathcal B^\top&A_\delta
+ \end{pmatrix}.
+\end{equation}
+This is a reordering and log transformation of the relevant full
+paper parameter vector $\theta$, not a new meaning for that vector.
+Use $\log\alpha'_g$ instead if effective dispersion is the coordinate
+being held fixed, and form all blocks in that same coordinate system.
+Assume the indicated blocks are invertible and the full matrix is
+positive definite on the identified coordinates.
+For a right-hand side $(b,0)$ the nuisance equation is
+$\mathcal B^\top x_\vartheta+A_\delta x_\delta=0$, so
+$x_\delta=-A_\delta^{-1}\mathcal B^\top x_\vartheta$.
+Substitute into the regression equation:
+\begin{equation}
+ (H_{\vartheta\vartheta}-\mathcal B A_\delta^{-1}\mathcal B^\top)x_\vartheta=b.
+\end{equation}
+Therefore
+\begin{equation}
+ [\mathcal H^{-1}]_{\vartheta\vartheta}
+   =(H_{\vartheta\vartheta}-\mathcal B A_\delta^{-1}\mathcal B^\top)^{-1},
+ \qquad V_{\vartheta\mid\delta}\approx H_{\vartheta\vartheta}^{-1}.
+ \label{eq:nuisance-schur}
+\end{equation}
+The second expression treats dispersion as fixed for inference.
+The first allows local nuisance estimation uncertainty.
+With positive-definite blocks it is no smaller in the PSD ordering.
+Expected orthogonality can make $\mathcal B=0$ in particular correctly specified
+models, but does not make an observed $\mathcal B$ identically zero.
+The aggregate model needs its own derivatives, not a borrowed orthogonality.
+
+For any smooth parameter transformation $\xi=\xi(\zeta)$,
+\begin{equation}
+ \nabla_\zeta^2L
+ =J_\xi^\top(\nabla_\xi^2L)J_\xi+
+       \sum_k L_{\xi_k}\nabla_\zeta^2\xi_k .
+ \label{eq:general-transform}
+\end{equation}
+This explains both the log-dispersion extra score term and the
+aggregate inner curvature. At $\alpha=0$, log dispersion is at infinity;
+ordinary interior joint-Wald asymptotics do not address that boundary.
+All inverse statements require the appropriate regular parameter space.
+
+\section{Group blocks, Schur solves, and complete regression covariance}
+\label{sec:covariance}
+
+\subsection{Structural zeros do not imply independent fitted groups}
+For each of the paper's likelihoods, with group-specific dispersion fixed,
+the regression information has the structure
+\begin{equation}
+ H=\begin{pmatrix}D&F\\F^\top&E\end{pmatrix},\quad
+ D=\blkdiag(D_1,\ldots,D_G),\quad
+ F=\begin{pmatrix}F_1\\ \vdots\\ F_G\end{pmatrix}.
+ \label{eq:border}
+\end{equation}
+Here $D_g$ is $P\times P$, $F_g$ is $P\times R$, and $E$ is $R\times R$.
+The expressions are \eqref{eq:poisson-blocks},
+\eqref{eq:aggregate-global}--\eqref{eq:aggregate-cross}, or
+\eqref{eq:cluster-blocks}, for the chosen family.
+Observed and expected versions must not be mixed without stating why.
+Joint nuisance blocks can be retained in a larger border or removed
+by the exact adjustment \eqref{eq:nuisance-schur}.
+The unrestricted matched-totals setup in
+Section~\ref{sec:aggregate-identification} has a singular covariate
+border; the invertible formulas below cannot be applied to that case
+without additional scientifically justified identifying restrictions.
+
+When $R=0$, the inverse is $\blkdiag(D_g^{-1})$.
+For $R>0$, common $\gamma$ connects groups through $F$.
+The appropriate covariance is not obtained by dropping those connections.
+Independently fitting each group's own $\gamma_g$ would instead define
+a different model and, for independent datasets, independent fitted groups.
+It is not the joint shared-covariate fit with a block-diagonal inverse.
+
+\subsection{Derive elimination from the two block equations}
+Solve $Hx=b$ with $x=(x_D,x_\gamma)$ and $b=(b_D,b_\gamma)$.
+The equations are
+\begin{align}
+ Dx_D+Fx_\gamma&=b_D,\\
+ F^\top x_D+Ex_\gamma&=b_\gamma .
+\end{align}
+Assume $D$ is nonsingular. Solve the first and substitute:
+\begin{align}
+ x_D&=D^{-1}b_D-D^{-1}Fx_\gamma,\\
+ (E-F^\top D^{-1}F)x_\gamma&=b_\gamma-F^\top D^{-1}b_D.
+\end{align}
+Define $\mathcal T=D^{-1}F$ and the Schur complement
+$\mathcal S=E-F^\top\mathcal T$.
+The calligraphic $\mathcal T_g=D_g^{-1}F_g$ is a $P\times R$
+matrix, distinct from the scalar $T_g=\sum_{i\in\mathcal I_g}\mu_i^Z$.
+With ${\mathcal S}$ nonsingular, the algorithm is
+\begin{equation}
+ y=D^{-1}b_D,\qquad
+ x_\gamma={\mathcal S}^{-1}(b_\gamma-F^\top y),\qquad x_D=y-\mathcal T x_\gamma.
+ \label{eq:schur-solve}
+\end{equation}
+Each occurrence of an inverse multiplying a vector or matrix means a
+linear solve with a factorization, not a demand to construct a dense inverse.
+The block structure allows the group solves to be performed separately.
+
+\subsection{Read off the inverse and prove definiteness conditions}
+The coefficients of the right-hand sides in \eqref{eq:schur-solve} give
+\begin{equation}
+ H^{-1}=
+ \begin{pmatrix}
+ D^{-1}+\mathcal T\mathcal S^{-1}\mathcal T^\top&-\mathcal T\mathcal S^{-1}\\
+ -\mathcal S^{-1}\mathcal T^\top&\mathcal S^{-1}
+ \end{pmatrix}. \label{eq:schur-inverse}
+\end{equation}
+Multiplication verifies the identity. For example the upper-right block
+of $HH^{-1}$ is $-D\mathcal T\mathcal S^{-1}+F\mathcal S^{-1}=0$,
+since $D\mathcal T=F$.
+The lower-right block is
+$-F^\top\mathcal T\mathcal S^{-1}+E\mathcal S^{-1}
+=\mathcal S\mathcal S^{-1}=I_R$.
+The remaining blocks similarly give $I_{GP}$ and zero.
+
+For vectors $a,b$, complete the square:
+\begin{equation}
+ \begin{pmatrix}a\\b\end{pmatrix}^{\!\top}H
+ \begin{pmatrix}a\\b\end{pmatrix}
+ =(a+\mathcal T b)^\top D(a+\mathcal T b)+b^\top\mathcal S b.
+ \label{eq:complete-square}
+\end{equation}
+Thus with $D\succ0$, $H\succ0$ if and only if ${\mathcal S}\succ0$.
+An invertible but indefinite matrix also has an algebraic inverse,
+but that inverse is not a valid likelihood covariance.
+For regular likelihood inference the covariance approximation is
+$V\approx H(\widehat\vartheta)^{-1}$ or $I(\widehat\vartheta)^{-1}$,
+subject to the model, asymptotic regime, and nuisance convention.
+
+\subsection{Shared covariates induce a low-rank group adjustment}
+Write $\mathcal T_g=D_g^{-1}F_g$. Equation \eqref{eq:schur-inverse} gives
+\begin{align}
+ V_{\beta_g\beta_h}
+ &=\mathbf1_{\{g=h\}}D_g^{-1}+\mathcal T_g\mathcal S^{-1}\mathcal T_h^\top,\\
+ V_{\beta_g\gamma}&=-\mathcal T_g\mathcal S^{-1},&
+ V_{\gamma\gamma}&={\mathcal S}^{-1}. \label{eq:cov-blocks}
+\end{align}
+The spatial adjustment $\mathcal T\mathcal S^{-1}\mathcal T^\top$
+is PSD and has rank at most $R$
+when ${\mathcal S}\succ0$. Its individual cross-group entries need not be positive.
+For a two-group spatial coefficient contrast,
+\begin{equation}
+ \Var(\widehat\beta_g-\widehat\beta_h)
+ \approx D_g^{-1}+D_h^{-1}
+       +(\mathcal T_g-\mathcal T_h)\mathcal S^{-1}
+        (\mathcal T_g-\mathcal T_h)^\top .
+\end{equation}
+Using the two marginal variances but dropping their covariance is wrong;
+using only $D_g^{-1}+D_h^{-1}$ omits shared-nuisance uncertainty unless
+the adjustment cancels. This cancellation can occur for a contrast even
+when each individual map has substantial nuisance-induced uncertainty.
+
+\subsection{Selected contrasts and marginal diagonals without dense inversion}
+For an auxiliary $k\times(GP+R)$ coefficient contrast $\mathcal C$, solve
+$HB=\mathcal C^\top$ by \eqref{eq:schur-solve}. Then
+\begin{equation}
+ \mathcal C V\mathcal C^\top\approx\mathcal C B.
+ \label{eq:selected-solve}
+\end{equation}
+For one contrast column $c$, solve $Hw_c=c$ and use $c^\top w_c$.
+For selected coefficient variances set $c$ to the corresponding unit
+vectors; for map variances set it to the spline-evaluation vectors.
+One may batch right-hand sides in memory-limited chunks.
+
+Partition $\mathcal C=(\mathcal C_D,\mathcal C_\gamma)$ and insert
+\eqref{eq:schur-inverse}. These are coefficient-space blocks, not
+the paper's selected-group matrix $C$ or selected-covariate matrix
+$C_\gamma$:
+\begin{equation}
+ \mathcal C H^{-1}\mathcal C^\top
+ =\mathcal C_DD^{-1}\mathcal C_D^\top+
+ (\mathcal C_\gamma-\mathcal C_D\mathcal T)\mathcal S^{-1}
+ (\mathcal C_\gamma-\mathcal C_D\mathcal T)^\top .
+ \label{eq:contrast-factor}
+\end{equation}
+This directly displays nuisance cancellation.
+For group $g$ at voxel $j$,
+\begin{equation}
+ \Var(x_j^\top\widehat\beta_g)
+ \approx x_j^\top D_g^{-1}x_j+
+        (\mathcal T_g^\top x_j)^\top\mathcal S^{-1}(\mathcal T_g^\top x_j).
+\end{equation}
+If $D_g=L_gL_g^\top$ is a Cholesky factorization, its first term is
+$\|L_g^{-1}x_j\|^2$. Analogous triangular solves evaluate the second.
+An $N\times N$ map covariance is not needed for $N$ standard errors.
+No arbitrary eigenvalue clipping or diagonal perturbation is hidden in
+these formulas.
+
+\subsection{Why the Schur complement is profile curvature}
+For a smooth local spatial optimum $\beta_*(\gamma)$,
+$L_\beta(\beta_*(\gamma),\gamma)=0$.
+Differentiate this equation with respect to $\gamma$:
+\[
+ D\,\frac{\partial\beta_*}{\partial\gamma^\top}+F=0,
+ \qquad \frac{\partial\beta_*}{\partial\gamma^\top}=-D^{-1}F.
+\]
+For the profiled negative log likelihood
+$L_{\rm prof}(\gamma)=L(\beta_*(\gamma),\gamma)$, the chain rule gives
+$\nabla_\gamma L_{\rm prof}=L_\gamma$ because $L_\beta=0$.
+Differentiating once more yields
+\[
+ \nabla_\gamma^2 L_{\rm prof}
+ =E+F^\top\frac{\partial\beta_*}{\partial\gamma^\top}
+ =E-F^\top D^{-1}F=\mathcal S.
+\]
+This identity concerns the observed Hessian along a differentiable
+interior solution branch with nonsingular $D$.
+Using expected information gives the corresponding efficient-information
+construction, not an exact data-specific profile derivative.
+
+\subsection{A closed-form Poisson nuisance adjustment}
+For the unpenalized full Poisson model, suppose the identified spatial
+basis contains a constant map: $Xc_B=\mathbf1_N$.
+Keep the spatial intercept available in each group and exclude
+confounded constant study columns so the full model is identifiable.
+Recall the scalar $T_g$, vector $t_g^{(z)}$, and matrix $V_g$
+defined in Section~\ref{sec:poisson}. Then
+\[
+ B_gc_B=X^\top\diag(\mu_g^X)Xc_B
+       =X^\top\mu_g^X=a_g,\qquad a_g^\top c_B=h_g.
+\]
+Consequently, whenever $D_g=T_gB_g$ is invertible,
+\begin{align}
+ \mathcal T_g
+ &=D_g^{-1}F_g
+   =\frac{c_B(t_g^{(z)})^\top}{T_g},\\
+ F_g^\top D_g^{-1}F_g
+ &=\frac{h_g}{T_g}t_g^{(z)}(t_g^{(z)})^\top,\\
+ \mathcal S
+ &=\sum_g h_g\left\{V_g-
+       \frac{t_g^{(z)}(t_g^{(z)})^\top}{T_g}\right\}
+   =\sum_g h_gT_g\Cov_{\pi_g}(Z_i^\top),
+ \qquad \pi_{ig}=\mu_i^Z/T_g .
+ \label{eq:poisson-efficient}
+\end{align}
+The last equality follows by writing the weighted covariance as
+$\sum_i\pi_{ig}Z_i^\top Z_i-\bar z_g\bar z_g^\top$ with
+$\bar z_g=t_g^{(z)}/T_g$.
+Thus information on shared covariates after estimating group baselines
+is exactly weighted \emph{within-group} variation in study covariates.
+For any direction $a$,
+\[
+ a^\top\mathcal S a
+  =\sum_g h_gT_g\sum_{i\in\mathcal I_g}
+      \pi_{ig}\{Z_i a-\bar z_g^\top a\}^2.
+\]
+It vanishes precisely when $Z_i a$ is constant within each group.
+This makes the identification condition explicit and computes the
+small Schur matrix without large spatial solves under the stated
+Poisson assumptions.
+It is not a replacement for the general NB, penalized, or constrained
+formulas.
+At an interior Poisson optimum, the spatial intercept score additionally
+gives $h_gT_g=Y_{g\cdot}$; then \eqref{eq:poisson-efficient} agrees
+with the allocation information derived after Equation~\eqref{eq:allocation}.
+
+\section{Roughness penalties and uncertainty interpretations}\label{sec:penalty}
+
+\subsection{A declared quadratic convention, not an invented operator}
+Paper Section 2.1.1 introduces a $P\times P$ roughness matrix $J$ and
+refers its construction to Supplementary Appendix A.1.
+That supplement is not supplied within the reference PDF used here.
+We therefore do not assert an exact derivative operator, integration
+domain, boundary condition, or normalization for its $J$.
+The following generic calculation applies to a supplied fixed symmetric
+$J\succeq0$ and declared nonnegative smoothing strengths $\tau_g$:
+\begin{equation}
+ \mathcal P(\vartheta)=\frac12\sum_g\tau_g\beta_g^\top J\beta_g
+ =\frac12\vartheta^\top K\vartheta,\quad
+ K=\blkdiag(\tau_1J,\ldots,\tau_GJ,0_{R\times R}).
+ \label{eq:penalty}
+\end{equation}
+This explicitly chooses the factor $1/2$.
+If a convention omits that factor, the same numerical $\tau_g$
+produces twice the gradient and twice the curvature.
+
+Expand one term as $\tau_g\sum_{ab}\beta_{ga}J_{ab}\beta_{gb}/2$.
+Differentiating with respect to $\beta_{gc}$ gives
+\begin{align}
+ \partial_{\beta_{gc}}\mathcal P
+ &=\frac{\tau_g}{2}
+       \left(\sum_bJ_{cb}\beta_{gb}+\sum_a\beta_{ga}J_{ac}\right)
+ =\tau_g(J\beta_g)_c,\\
+ \partial_{\beta_{gc}\beta_{ge}}^2\mathcal P&=\tau_gJ_{ce}.
+\end{align}
+Thus for $L_{\rm pen}=-\ell+\mathcal P$,
+\begin{equation}
+ \nabla L_{\rm pen}=-U+K\vartheta,\qquad H_{\rm pen}=H+K.
+\end{equation}
+Separate group penalties preserve the group blocks and shared border.
+The penalized score equation is $U(\widehat\vartheta)=K\widehat\vartheta$,
+not $U(\widehat\vartheta)=0$.
+
+\subsection{Sampling covariance versus posterior inverse curvature}
+Expand the penalized equation near an unpenalized target $\vartheta_0$:
+\begin{align}
+ 0&\approx U(\vartheta_0)-H(\vartheta_0)(\widehat\vartheta-\vartheta_0)
+                 -K\vartheta_0-K(\widehat\vartheta-\vartheta_0),\\
+ (H+K)(\widehat\vartheta-\vartheta_0)&\approx U(\vartheta_0)-K\vartheta_0 .
+\end{align}
+Under a correctly specified likelihood, replacing sensitivity by $I$
+gives the local approximations
+\begin{equation}
+ \operatorname{bias}(\widehat\vartheta)\approx-(I+K)^{-1}K\vartheta_0,\qquad
+ V_{\rm freq}\approx(I+K)^{-1}I(I+K)^{-1}.
+ \label{eq:penalty-frequentist}
+\end{equation}
+Strong smoothing can change the population target; this linearization
+is not a global exact bias identity.
+By contrast a Gaussian-prior interpretation of $K$ leads to a Laplace
+posterior covariance approximation $(H+K)^{-1}$.
+Only an actually quadratic posterior would make this exact.
+In expected-curvature notation the difference is
+\begin{equation}
+ (I+K)^{-1}-(I+K)^{-1}I(I+K)^{-1}
+ =(I+K)^{-1}K(I+K)^{-1}\succeq0.
+\end{equation}
+Thus inverse penalized curvature alone is not generally the frequentist
+sampling variance of a penalized estimator. Neither variance includes
+squared smoothing bias about the unpenalized target.
+For scalar information $i>0$ and penalty $k$, the two variances are
+$1/(i+k)$ and $i/(i+k)^2$, respectively.
+
+\subsection{Smoothing selection and identifiability remain separate}
+All preceding derivatives condition on fixed $\tau_g$.
+If a data-driven rule selects them, differentiating the score equation
+along a smooth solution branch gives
+\begin{equation}
+ (H+K)\frac{\partial\widehat\vartheta}{\partial\tau_g}
+ =-\frac{\partial K}{\partial\tau_g}\widehat\vartheta .
+\end{equation}
+A joint delta calculation must include uncertainty in $\widehat\tau$
+and its covariance with the regression fit, or a bootstrap must repeat
+the selection rule. Merely adding an independent variance term is
+unjustified in general.
+For $H,K\succeq0$, $H+K\succ0$ precisely when
+$\ker(H)\cap\ker(K)=\{0\}$, because both quadratic forms are nonnegative.
+A roughness penalty leaving constant maps unpenalized cannot resolve
+the constant-map confounding direction in \eqref{eq:confounding}.
+Adding a numerical ridge changes the inverse and possibly the estimator;
+it is not evidence that the original information supported reliable tests.
+
+\section{Group maps, covariate contrasts, and Wald inference}\label{sec:inference}
+
+\subsection{Linear map evaluation and full voxelwise group covariance}
+The baseline log-intensity map is $\eta_g^X=X\beta_g$, an $N$-vector.
+For its coefficient covariance $V_{gg}$, the dimensionally correct identity is
+\begin{equation}
+ \Var(\widehat\eta_g^X)\approx XV_{gg}X^\top ,
+ \label{eq:map-variance}
+\end{equation}
+not $X^\top V_{gg}X$ when $X$ is $N\times P$.
+For all groups at voxel $j$, define the auxiliary evaluation matrix
+\begin{equation}
+ A_j=(I_G\otimes x_j^\top,\ 0_{G\times R}).
+\end{equation}
+Let $g_1,\ldots,g_S$ be the $S$ groups involved in the test and let
+$P_G\in\R^{S\times G}$ select them in that order.
+On the log-intensity scale recommended by the paper,
+\begin{equation}
+ \theta_j=
+ \begin{pmatrix}\log\mu_{g_1j}^X\\ \vdots\\\log\mu_{g_Sj}^X\end{pmatrix}
+ =P_GA_j\vartheta,\qquad
+ V_j=P_GA_j V A_j^\top P_G^\top .
+ \label{eq:voxel-selection}
+\end{equation}
+Here $\theta_j$ and $V_j$ now have exactly their paper Equation~12
+meanings and dimensions. $V$ is the chosen regression covariance
+estimate, so $V_j$ is its induced voxel covariance estimate.
+Its $(a,b)$ entry is
+$x_j^\top V_{\beta_{g_a}\beta_{g_b}}x_j$, including the cross-group
+terms induced by estimating shared $\gamma$.
+For the paper's contrast $C\in\R^{m\times S}$, define a new
+\emph{coefficient-space} matrix $\mathcal C_j=CP_GA_j$.
+Then
+\begin{equation}
+ C\theta_j=\mathcal C_j\vartheta,\qquad
+ C V_j C^\top=\mathcal C_j V\mathcal C_j^\top .
+ \label{eq:group-contrast}
+\end{equation}
+The covariance can therefore be computed by selected coefficient
+solves without forming $V$ or any $N\times N$ map covariance.
+This evaluates the spatial baseline at the zero covariate row.
+For a prediction at fixed covariate row $Z_*\in\R^{1\times R}$,
+append $Z_*$ to the appropriate spatial evaluation row.
+For group contrasts whose row sums are zero, the common $Z_*\gamma$
+term cancels; it does not cancel for arbitrary contrasts.
+
+\subsection{Wald rank, degrees of freedom, and estimability}
+For the paper's null $H_0:C\theta_j=0$, put
+$d_j=C\widehat\theta_j$ and $\Omega_j=C V_j C^\top$.
+With $m$ linearly independent estimable rows and $\Omega_j\succ0$,
+\begin{equation}
+ Q_j=(C\widehat\theta_j)^\top(C V_j C^\top)^{-1}
+          (C\widehat\theta_j)
+       \ \overset{H_0}{\approx}\ \chi_m^2 .
+ \label{eq:wald}
+\end{equation}
+This is paper Equation~12; $Q_j$ is only a helper name for its
+squared statistic. To see the degrees of freedom, take
+$\Omega_j=L_jL_j^\top$. Under the null, asymptotic normality gives
+$L_j^{-1}d_j\approx N_m(0,I_m)$, and
+$Q_j=\|L_j^{-1}d_j\|^2$ is approximately a sum of $m$ independent
+squared standard normals.
+For a nonzero specified null $C\theta_j=d_0$, replace $d_j$
+by $C\widehat\theta_j-d_0$.
+The approximation requires asymptotic normality and an appropriate
+covariance estimate, not merely an invertible numerical matrix.
+Redundant rows must be removed, or a generalized-inverse version uses
+the rank of the estimable covariance on its supported null space.
+Unidentified directions cannot be made testable by a pseudoinverse alone.
+With a singular design, an estimable contrast must annihilate its null
+directions under the chosen constraints.
+
+For one scalar contrast with positive standard error,
+\begin{equation}
+ W_j=\frac{C\widehat\theta_j}{\sqrt{C V_j C^\top}}
+      \ \overset{H_0}{\approx}\ N(0,1),\qquad Q_j=W_j^2,
+ \quad C\in\R^{1\times S}.
+\end{equation}
+This preserves the signed $W_j$ of paper Equation~13, instead of
+renaming it $Z$ and colliding with the study design.
+For example, take $S=2$, $C=(1,-1)$, and groups $g,h$.
+Then
+\[
+ W_j=
+ \frac{x_j^\top(\widehat\beta_g-\widehat\beta_h)}
+ {\sqrt{x_j^\top
+ (V_{\beta_g\beta_g}+V_{\beta_h\beta_h}
+     -V_{\beta_g\beta_h}-V_{\beta_h\beta_g})x_j}}.
+\]
+The two cross-covariances follow directly by expanding the variance
+of a difference, rather than assuming independent group estimates.
+No universal ``sum-to-one'' condition is imposed on a contrast.
+Differences such as $(1,-1)$ sum to zero, averages can sum to one,
+and coefficient tests use other valid rows. The null determines the rows;
+independence and estimability determine the degrees of freedom.
+
+\subsection{Shared global-covariate inference}
+Select $s$ of the $R$ global covariates with a row-selection matrix
+$P_\gamma\in\R^{s\times R}$ and define
+$\gamma_{\rm sel}=P_\gamma\gamma$.
+The paper's $C_\gamma$ has dimension $m\times s$, not
+$m\times R$ unless all covariates are selected.
+The selection and contrast steps give
+\[
+ V_{\rm sel}=P_\gamma V_{\gamma\gamma}P_\gamma^\top,\qquad
+ \Var(C_\gamma\widehat\gamma_{\rm sel})
+       \approx C_\gamma V_{\rm sel} C_\gamma^\top .
+\]
+For $H_0:C_\gamma\gamma_{\rm sel}=0$, paper Equation~14 is therefore
+\begin{equation}
+ Q_\gamma=(C_\gamma\widehat\gamma_{\rm sel})^\top
+       (C_\gamma V_{\rm sel}C_\gamma^\top)^{-1}
+       (C_\gamma\widehat\gamma_{\rm sel})\ \approx\ \chi_m^2 .
+\end{equation}
+Under the fixed-dispersion inverse-information convention,
+$V_{\rm sel}=P_\gamma\mathcal S^{-1}P_\gamma^\top$.
+Joint dispersion adjustment, robust covariance, or penalized sampling
+covariance can require the corresponding replacement.
+All $m$ rows must again be independent and estimable.
+For a specified nonzero null, subtract its $m$-vector on both sides
+of the quadratic form.
+The conditional inverse $E^{-1}$ is not generally $V_{\gamma\gamma}$.
+Even a small $R$ does not guarantee stable covariate inference:
+${\mathcal S}$ can be nearly singular when covariates are confounded with group
+baselines or with one another. Nonzero fitted coefficients do not prove
+information rank. Low dimension helps computation, not identification.
+Because covariates have units and preprocessing scales, comparisons
+between two components of $\gamma$ must specify that scale.
+
+\subsection{Exponentiation and optional normalization}
+For the baseline intensity $\mu_g^X=\exp(X\beta_g)$, componentwise differentiation
+gives $d\mu_g^X=\diag(\mu_g^X)X\,d\beta_g$.
+Therefore the first-order delta covariance is
+\begin{equation}
+ \Cov(\widehat \mu_g^X,\widehat \mu_h^X)
+ \approx \diag(\mu_g^X)X V_{\beta_g\beta_h}X^\top\diag(\mu_h^X).
+ \label{eq:exp-delta}
+\end{equation}
+At a voxel, $\Var(\widehat \mu_{gj}^X)\approx
+(\mu_{gj}^X)^2\Var(x_j^\top\widehat\beta_g)$.
+The map from $\beta_g$ to log intensity is linear; the exponentiation step
+introduces an additional delta approximation.
+If the paper's $\theta_j$ is instead taken on the intensity scale,
+replace \eqref{eq:voxel-selection} by
+$\theta_j=\exp(P_GA_j\vartheta)$ and use Jacobian
+$\diag(\theta_j)P_GA_j$ to form $V_j$.
+Using the log-map covariance unchanged in an intensity-scale test
+would omit these mean factors.
+A log-scale interval exponentiates to a positive intensity interval,
+and a log-difference interval exponentiates to an intensity-ratio interval.
+
+As an optional derived output, normalize $q_g=\mu_g^X/h_g$.
+Since $dh_g=(\mu_g^X)^\top X\,d\beta_g$, the quotient rule gives
+\begin{equation}
+ \frac{\partial q_g}{\partial\beta_g^\top}
+ =\{\diag(q_g)-q_gq_g^\top\}X .
+\end{equation}
+The row derivatives sum to zero because $\sum_jq_{gj}=1$.
+Its covariance is necessarily singular in that normalization direction.
+This optional probability map is not the same estimand as the paper's
+unnormalized baseline intensity; normalize only if that is the intended
+scientific question.
+
+\subsection{Homogeneous references estimated from the data}
+For a genuinely known homogeneous log baseline $\eta_{g0}$,
+the scalar null $x_j^\top\beta_g=\eta_{g0}$ uses the standard contrast
+variance. If $\eta_{g0}$ is estimated from the same data, instead
+\begin{equation}
+ \Var(x_j^\top\widehat\beta_g-\widehat\eta_{g0})
+ =\Var(x_j^\top\widehat\beta_g)+\Var(\widehat\eta_{g0})
+          -2\Cov(x_j^\top\widehat\beta_g,\widehat\eta_{g0}).
+\end{equation}
+The estimated reference is not automatically a fixed null constant.
+For example, a linear reference $a^\top\beta_g$ is tested with
+row $(x_j-a)^\top$, not with $x_j^\top$ alone.
+A separately constrained homogeneous fit may require joint influence
+calculations or a null bootstrap repeating the estimation.
+For a concrete alternative reference derived from the fitted map,
+take $\eta_{g0}=\log(h_g/N)$, the log of its mean intensity.
+This is not asserted to be the same as a separately refitted null.
+Because $dh_g=a_g^\top d\beta_g$,
+\[
+ \nabla_{\beta_g}\{x_j^\top\beta_g-\log(h_g/N)\}
+      =x_j-a_g/h_g,
+\]
+so its local delta variance is
+\[
+ (x_j-a_g/h_g)^\top V_{\beta_g\beta_g}(x_j-a_g/h_g),
+\]
+evaluated at the fitted parameters. The centered log intensity is
+$\log(Nq_{gj})$, which also exhibits its relation to the optional
+normalized map.
+The same qualification applies after exponentiating the reference.
+Finally, voxelwise $p$-values are not already familywise-corrected results;
+multiple-testing procedures require their own assumptions and a
+clearly specified testing family.
+
+\section{Resampling and an optional robust-covariance extension}\label{sec:bootstrap}
+
+\subsection{Study sandwich: an extension, not the core paper calculation}
+For a genuine study-factorized likelihood, let
+$U_i=\nabla_\vartheta\ell_i$ and $H=-\sum_i\nabla_\vartheta U_i^\top$.
+A standard study-cluster sandwich estimate is
+\begin{equation}
+ \widehat V_{\rm rob}=H^{-1}\left(\sum_iU_iU_i^\top\right)H^{-1}.
+ \label{eq:sandwich}
+\end{equation}
+These are sums, so no additional $1/M$ factor is inserted.
+Its usual justification uses independent studies, enough independent units,
+identification, and appropriate estimating-equation regularity.
+Poisson uses $U_i=\sum_jb_{ij}(Y_{ij}-\mu_{ij})$.
+The underlying independent NB uses its weighted residual score, whereas
+clustered NB uses $U_i=B_i^\top(Y_i-c_i\mu_i)$.
+Substituting Poisson residuals into a fitted NB sandwich changes the
+estimating equation and is not a general NB robust covariance.
+
+The aggregate NB likelihood is a function of group--voxel totals and
+nonlinear moment maps across studies. It does not provide arbitrary
+study-factorized likelihood scores. A valid influence calculation for
+that aggregate estimator, or refitting after study resampling, requires
+separate justification. Assigning each study a convenient fraction of
+an aggregate score does not establish \eqref{eq:sandwich}.
+
+For selected coefficient contrasts solve $HB=\mathcal C^\top$ and accumulate
+\begin{equation}
+ \mathcal C\widehat V_{\rm rob}\mathcal C^\top
+ =\sum_i(B^\top U_i)(B^\top U_i)^\top .
+\end{equation}
+This is a PSD Gram matrix with rank at most $\min(M,k,GP+R)$.
+At an exactly solved unpenalized score equation, $\sum_iU_i=0$
+reduces the bound to $M-1$. Few studies can therefore limit inference
+even with many observed foci.
+Joint nuisance estimation requires corresponding joint scores and bread.
+For fixed penalties the bread is $H+K$, while the deterministic penalty
+is not an extra independent random score in the meat.
+Score centering and the penalized population target require attention
+under substantial shrinkage; a naive uncentered meat is not universal.
+
+\subsection{Null resampling tailored to the tested hypothesis}
+Paper Section 2.1.4 describes randomization under spatial homogeneity
+using a binomial process and group comparison using a pooled shared
+intensity fit followed by regeneration and refitting.
+These procedures simulate a specified null; they are not distribution-free.
+A careful operational specification is:
+\begin{enumerate}
+ \item State the null, including which group maps coincide or are
+ homogeneous, whether study totals are conditioned on, the voxel mask,
+ covariates, dispersion convention, and the count-generating distribution.
+ \item Fit the null, estimating its nuisance parameters under its
+ constraints. For shared-baseline group comparisons retain the intended
+ covariate design and the numbers of studies in each group.
+ \item Generate independent studies under that null. For clustered NB,
+ draw one gamma multiplier per study and then its conditionally
+ independent counts; drawing one new multiplier per voxel changes the model.
+ \item Apply the same preprocessing conventions and refit the same
+ alternative or statistic-producing procedure used on the observed data.
+ Re-estimate fitted dispersion, and repeat penalty selection if it was
+ part of the original procedure rather than a prespecified constant.
+ \item Compare the observed statistic with the simulated null statistics,
+ using the chosen one-sided, two-sided, or maximum-statistic rule.
+\end{enumerate}
+For aggregate NB, distinguish simulating the matched totals distribution
+from simulating original independent NB studies and then aggregating.
+They assess different distributions except in an exact closure case.
+If the statistic requires study totals or study-level resampling, aggregate
+totals alone do not uniquely specify a study allocation.
+
+\subsection{Replicates, failed fits, and what the foci threshold means}
+For $B$ successful null replicates with statistics $T_b$, a common
+Monte Carlo tail estimate is
+\begin{equation}
+ \widehat p=\frac{1+\sum_{b=1}^B\mathbf1_{\{T_b\geq T_{\rm obs}\}}}{B+1}.
+\end{equation}
+The comparison statistic must encode sidedness consistently.
+The smallest attainable value is $1/(B+1)$, which matters for
+multiple-testing resolution. Conditional on an ideal fixed null,
+Monte Carlo variation is on the order of
+$\sqrt{p(1-p)/B}$; nuisance estimation adds other approximation error.
+The paper describes at least 1,000 repetitions.
+This is a reported procedural choice, not a universal guarantee of
+accurate extreme tails.
+
+Predefine convergence checks and a failed-fit policy.
+Record attempted and successful fits, retry rules, boundary estimates,
+and sensitivity to failures. Silently deleting difficult fits can select
+a nonrepresentative null distribution.
+Resampling whole independent studies, typically within groups for
+group-specific sampling targets, preserves their within-study dependence.
+Voxelwise resampling does not.
+A nonparametric study bootstrap and a parametric null bootstrap address
+different questions; a hypothesis test needs an appropriate null mechanism.
+
+The paper's practical criterion of approximately 200 foci for reliable
+inverse-information inference is empirical guidance from its setting.
+It is not a theorem about rank, coverage, or every design.
+Rank and conditioning also depend on spline support, study allocation,
+covariate variation, dependence, and fitted intensity.
+Bootstrap avoids directly using some unstable inverses but cannot
+automatically cure nonidentification, poor model fit, or failed optimization.
+
+\section{Numerical audit, conditioning, and computational accounting}
+\label{sec:numerics}
+
+\subsection{Symmetric eigenvalues and scale-aware diagnostics}
+For a symmetric positive-definite information matrix, the spectral
+condition number is
+\begin{equation}
+ \kappa_2(H)=\lambda_{\max}(H)/\lambda_{\min}(H).
+\end{equation}
+To derive this without a general singular-value decomposition, let
+$H=O\Lambda O^\top$ with $O$ orthogonal. Then
+$H^\top H=O\Lambda^2O^\top$, so the singular values are
+$|\lambda_a|$. For any symmetric nonsingular $H$,
+\[
+ \kappa_2(H)=\frac{\max_a|\lambda_a|}{\min_a|\lambda_a|};
+\]
+positive definiteness permits dropping the absolute values.
+A symmetric eigensolver therefore targets the same spectral condition
+number as a general SVD; it does not merely estimate a different norm.
+Inspect signed symmetric eigenvalues, not just magnitudes: a negative
+eigenvalue indicates indefinite curvature, whereas a tiny positive one
+indicates weak information or scaling. Check symmetry before applying a
+symmetric eigensolver; substantial antisymmetry indicates an assembly or
+differentiation problem.
+No universal threshold on $\kappa_2$ proves inferential validity.
+
+Block conditioning alone is insufficient.
+For $H=\diag(1,10^{-8})$, each scalar block has condition number one,
+but the full matrix has condition number $10^8$.
+For independent blocks the characteristic polynomial is the product
+of their characteristic polynomials, so the full spectrum is their
+union. Use the global largest and smallest eigenvalue magnitudes.
+For a bordered matrix, Schur elimination is a congruence rather than
+an orthogonal similarity: the spectra of $D$ and ${\mathcal S}$ do not generally
+combine into the spectrum of $H$.
+Border coupling can create a second problem:
+\begin{equation}
+ H_\varepsilon=\begin{pmatrix}1&1-\varepsilon\\1-\varepsilon&1\end{pmatrix},
+ \quad \lambda(H_\varepsilon)=\{\varepsilon,2-\varepsilon\},\quad
+ {\mathcal S}=1-(1-\varepsilon)^2 .
+\end{equation}
+For small positive $\varepsilon$, all diagonal blocks are benign,
+yet the full covariance is unstable. This is near confounding through
+the shared border. Examine $D_g$, ${\mathcal S}$, and scale, not just blockwise rank.
+
+If $\vartheta=A\phi$ for a fixed nonsingular scale matrix $A$,
+$H_\phi=A^\top H_\vartheta A$ and $V_\vartheta=AV_\phi A^\top$.
+Scaling can improve numerical solves while leaving correctly transformed
+contrasts unchanged. It cannot create information in a true null direction.
+For a computed solve $Hx=b$, inspect the relative residual
+$\|Hx-b\|/(\|H\|\|x\|+\|b\|)$; a small residual is a numerical check,
+not a proof that estimated standard errors have correct coverage.
+
+\subsection{Manual Schur example with two groups and one covariate}
+Take $G=2$, $P=R=1$, with
+\begin{equation}
+ D=\begin{pmatrix}2&0\\0&3\end{pmatrix},\quad
+ F=\begin{pmatrix}1\\1\end{pmatrix},\quad E=2.
+\end{equation}
+Then $\mathcal T=(1/2,1/3)^\top$, ${\mathcal S}=2-1/2-1/3=7/6$, and
+\begin{equation}
+ H=\begin{pmatrix}2&0&1\\0&3&1\\1&1&2\end{pmatrix},
+ \qquad H^{-1}=\frac17
+ \begin{pmatrix}5&1&-3\\1&3&-2\\-3&-2&6\end{pmatrix}.
+\end{equation}
+Both $D$ and ${\mathcal S}$ are positive definite, so \eqref{eq:complete-square}
+proves $H\succ0$. Multiplying the displayed matrices gives identity.
+The fitted groups have covariance $1/7$, despite their zero direct
+information cross block. Their difference has variance
+$(5+3-2)/7=6/7$.
+Treating $\gamma$ as fixed instead gives $1/2+1/3=5/6$.
+The shared-nuisance adjustment is
+$(1/2-1/3)^2(6/7)=1/42$, so $5/6+1/42=6/7$.
+Adding the marginal joint variances while omitting covariance would give
+$8/7$, a different and incorrect result for this contrast.
+These are audit numbers, not a fitted example or a performance claim.
+
+\subsection{Manual moment-matching examples}
+For two studies take $\mu_1^Z=1$, $\mu_2^Z=2$, $\mu_j^X=1/2$, and $\alpha=1$.
+Then $s_1=3$, $s_2=5$, $s_3=9$, and
+\begin{equation}
+ {\mu_j}=\frac32,\quad \Var(Y_j)=\frac32+\frac54=\frac{11}{4},\quad
+ {r'}=\frac95,\quad A=\frac35,\quad {p'}_j=\frac5{11}.
+\end{equation}
+The matched variance is
+${\mu_j}+{\mu_j}^2/{r'}=3/2+(9/4)/(9/5)=11/4$,
+confirming the two-moment calculation.
+The third-cumulant discrepancy from \eqref{eq:third-cumulant} is
+$2(1/2)^3(9-25/3)=1/6$, demonstrating nonexact closure.
+
+For an exact common-probability case let $\mu_1^Z=\mu_2^Z=1$ with the same
+$\mu_j^X=1/2$ and $\alpha=1$.
+Then $s_1=s_2=2$, ${r'}=2$, $A=1$, ${\mu_j}=1$, and ${p'}_j=1/3$.
+Each original cell has shape one and probability $1/3$;
+their sum has shape two and the same probability.
+Its variance is $1+1/2=3/2$, equal to the sum of the original variances.
+These two examples separately check the approximation and the exact case.
+
+\subsection{Complexity of assembly, solves, and requested output}
+Let $d=GP+R$. The following are dense worst-case algebraic orders,
+not timings, speedups, or claims about a particular implementation.
+Spline sparsity, caching, and the number of requested contrasts can
+substantially change practical costs.
+\begin{center}\small
+\begin{tabularx}{\textwidth}{T l T}
+\toprule
+Operation & Dense order & Qualification\\
+\midrule
+Full $d\times d$ factorization & $O(d^3)$ &
+Storage $O(d^2)$, before any map output\\
+Factor separate $D_g$ & $O(GP^3)$ &
+Storage $O(GP^2)$ for group factors\\
+Solve $D_g\mathcal T_g=F_g$ & $O(GP^2R)$ &
+Reuses the group factors\\
+Form and factor ${\mathcal S}$ & $O(GPR^2+R^3)$ &
+Border storage $O(GPR+R^2)$\\
+$k$ selected right-hand sides & $O(k[GP^2+GPR+R^2])$ &
+After factorization; no full inverse needed\\
+Spatial weighted Gram assembly & $O(GNP^2)$ &
+Reusable group terms for separable families\\
+Study covariate moment assembly & $O(MR^2)$ &
+First/second moments for Poisson and matched NB\\
+All group map diagonals & $O(GNP^2+GNPR+GNR^2)$ &
+Dense triangular solves; chunk voxels to limit memory\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Clustered projection also uses study-specific scalar weights and
+rank-one group corrections, as in \eqref{eq:cluster-blocks}.
+Aggregate NB global blocks use the inner $R$-dimensional moments and
+outer voxel sums, not an original independent-cell Hessian.
+The displayed assembly orders do not include fitting iterations,
+special-function costs, preprocessing, bootstrap replication, or
+the cost of constructing a roughness matrix.
+An efficient factorization changes neither the model nor the validity
+conditions of its covariance approximation.
+
+\subsection{Audit checklist and limits of this appendix}
+For manual or implementation review, check in this order:
+\begin{enumerate}
+ \item Fix the paper's $X,Z,\beta_g,\gamma$ dimensions and remove
+ unidentified directions. State the observation model and data margins.
+ \item Fix original versus effective dispersion during each derivative.
+ Keep factorial and gamma terms whenever their derivatives or absolute
+ likelihood interpretation require them.
+ \item Verify scalar signs and every nonlinear inner-map term.
+ For aggregate NB compare original and log-coordinate formulas;
+ for clustered NB compare log-mean projection and total-mean differentiation.
+ \item Assemble $D_g,F_g,E$ and compare selected full-system and
+ Schur solves, including the signed symmetry and residual checks.
+ \item Declare observed or expected information, fixed or joint nuisance
+ inference, and frequentist or posterior penalty interpretation.
+ \item Form estimable contrasts with the full required covariance and
+ qualify the null, asymptotic reference, resampling law, and multiplicity rule.
+\end{enumerate}
+All derivations are contained in this single source.
+The algebra was adapted from the repository's
+\texttt{cbmr\_expanded\_appendix.tex} and
+\texttt{expanded\_covariance.tex} solely as provenance, not as required reading
+or generated inputs. No claim is made that every line has been verified
+in a proof assistant, that every optional extension is implemented,
+or that the unavailable original supplement has been reconstructed.
+Exact differentiation of a specified likelihood, exact block algebra,
+working-model accuracy, numerical reliability, and asymptotic coverage
+are distinct claims and must be assessed separately.
+
+\subsection{Editable source and independent build}
+The editable source is \texttt{docs/imag\_a\_1057\_appendix.tex}.
+From the repository root:
+\begin{verbatim}
+make imag-appendix
+\end{verbatim}
+The command \texttt{make paper-appendices} builds this document and
+the separate lesion-manuscript appendix. Neither command replaces
+the supplied papers or the combined expanded appendix.
+
+\begin{thebibliography}{9}
+\bibitem{yu2025}
+Y. Yu, L. D. Hill-Bowen, M. C. Riedel, et al.
+\newblock CBMR: Coordinate-based meta-regression for group and covariate inference.
+\newblock \emph{Imaging Neuroscience}, 3, 2025.
+\newblock DOI: \href{https://doi.org/10.1162/IMAG.a.1057}{10.1162/IMAG.a.1057}.
+\newblock Supplied reference: \texttt{docs/imag.a.1057.pdf}.
+\end{thebibliography}
+\end{document}

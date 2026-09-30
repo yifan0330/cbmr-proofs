@@ -1,0 +1,1860 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,tabularx,microtype}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,
+ pdftitle={Expanded Appendix: Scalable Spatial Model for Brain MRI Lesion Mask Data}}
+\emergencystretch=3em
+\newcommand{\R}{\mathbb R}
+\newcommand{\E}{\operatorname{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\vr}{\operatorname{vec}_{\rm row}}
+\newcolumntype{T}{>{\raggedright\arraybackslash}X}
+\numberwithin{equation}{section}
+\setcounter{tocdepth}{2}
+\title{Expanded Mathematical Appendix\\
+ \large Scalable Spatial Model for Brain MRI Lesion Mask Data\\
+ \normalsize Companion to \texttt{cbmr\_paper.pdf}}
+\author{}
+\date{15 September 2026}
+\begin{document}
+\maketitle
+\begin{abstract}
+This self-contained appendix develops the model in the supplied manuscript
+by Yifan Yu and Thomas E. Nichols, \emph{Scalable Spatial Model for Brain
+MRI Lesion Mask Data}. Its central parameters are spatially varying
+covariate-effect maps for binary subject images. We derive the Poisson
+and independent negative-binomial working scores and Hessians, the
+separable initialization, the Kronecker preconditioner, the subject-centered
+Taylor approximation, and model-based and subject-clustered inference.
+The supplement's QR sandwich and toy slope-map variance are expanded,
+including their coefficient-order and dimension qualifications.
+The manuscript's mass-univariate logistic comparator is treated separately.
+All intermediate dimensions and vectorization conventions are explicit.
+Where a displayed manuscript formula needs qualification or correction,
+that distinction is stated rather than inherited silently.
+This is a handwritten mathematical review document, not a new claim of
+complete symbolic or proof-assistant certification.
+\end{abstract}
+\noindent\textbf{Scope.}
+The multi-group coordinate-based meta-regression model from
+\texttt{imag.a.1057.pdf} has a different parameterization and is
+developed in the separate \texttt{imag\_a\_1057\_appendix.pdf}.
+Its moment-matched aggregate and study-clustered NB likelihoods
+are not substituted for the independent-cell NB working likelihood here.
+\tableofcontents
+\clearpage
+
+\section{Paper correspondence, model setup, and dimensions}
+
+\subsection{A map to the supplied manuscript}
+\begin{center}\small
+\begin{tabularx}{\textwidth}{lT}
+\toprule
+Manuscript location & Material developed here\\
+\midrule
+Section 2.1; (2.1)--(2.4) & Fixed spline or QMC spatial basis\\
+Section 2.2; (2.5)--(2.7) & Mass-univariate comparator and spatial-effect design\\
+(2.8)--(2.10); S1.2--S1.3 & Poisson/NB working likelihoods, binary specialization,
+and distinction from a normalized binary model\\
+(2.11); Algorithm 1, Stage 1 & Identifiable separable Poisson initialization\\
+(2.12)--(2.13); (S2.36)--(S2.37) & Family-specific scoring and exact versus
+approximate Kronecker preconditioning\\
+(2.14); (S2.38)--(S2.42) & Subject-centered Taylor expansion, dimensions,
+and correct weighted basis product\\
+(2.15)--(2.18) & Voxel contrasts, Fisher information, and a matching
+subject-level sandwich\\
+S1.1; (S1.19)--(S1.23) & Logistic and Firth comparator derivatives\\
+S2.2; (S2.43)--(S2.50) & Weighted-design QR and triangular sandwich solves\\
+S2.3 & Toy slope-map variance, coefficient permutation, and corrected
+subject/spatial moment factors\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Equation numbers in the left column refer to the supplied manuscript;
+numbers elsewhere in this appendix refer to the present document.
+The manuscript sometimes labels a full-model likelihood by $\gamma$;
+we use $\beta$ for its full spatial coefficient vector and reserve
+$\gamma$ for the separable initialization's global coefficients,
+except in explicitly labelled local supplementary conventions.
+
+\subsection{Notation crosswalk and deliberate disambiguations}
+The main-text conventions are retained rather than importing the
+different conventions of \texttt{imag.a.1057.pdf}.
+In particular, here $Z_i$ and $B_j$ are \emph{columns}; the rows
+of the two design matrices are $Z_i^\top$ and $B_j^\top$.
+\begin{center}\small
+\begin{tabularx}{\textwidth}{lT}
+\toprule
+Manuscript symbol & Meaning and use in this appendix\\
+\midrule
+$M,N,R,P$ & Numbers of subjects, voxels, covariates, and spatial bases\\
+$Z,\ B,\ X$ & Designs of dimensions $M\times R$, $N\times P$,
+and $MN\times RP$, with $X=Z\otimes B$\\
+$Y,\ \mu,\ \eta$ & Subject-major stacked count, mean, and log-mean
+vectors of length $MN$\\
+$\widetilde Y,\ \widetilde\beta$ & The paper's $M\times N$ data array
+and $R\times P$ coefficient reshape from (2.14)\\
+$\varphi_j$ & Main-text (2.5)'s $R$-vector of voxelwise effects;
+in the spatial model $\varphi_j=(I_R\otimes B_j^\top)\beta$\\
+$\xi,\ \gamma$ & Separable initialization coefficients of dimensions
+$P$ and $R$, not the full $RP$-vector $\beta$\\
+$\mu^B,\ \mu^Z,\ W_B,\ W_Z$ & Separable spatial/study factors
+and their diagonal Poisson weight matrices in (2.13)\\
+$\widetilde Z,\ \bar\eta,\ \widetilde B$ & Centered covariates,
+subject-average log mean, and singly weighted basis from (2.14)\\
+$\alpha,\ I(\beta)$ & Global NB dispersion and regression Fisher information\\
+$C,\ S,\ W_j$ & Contrast $C\in\R^{S\times R}$, number of tested
+constraints, and the \emph{signed} statistic in (2.16)\\
+$\bar\eta_C,\ \bar\mu_C$ & Contrast maps $(C\otimes B)\beta$
+and their componentwise exponentials, not subject averages\\
+\bottomrule
+\end{tabularx}
+\end{center}
+New helpers are explicitly introduced: $\operatorname{vec}_{\rm row}$
+fixes the paper's vectorization order; $\widetilde\eta$ and
+$\widetilde\mu$ are $M\times N$ arrays; $H=-\nabla^2\ell$ is observed
+information; $P_0$ is a fixed full-model preconditioner; and
+$Q_j$ names a squared Wald statistic, leaving $W_j$ signed.
+We use the auxiliary NB shape $\nu=1/\alpha$ so that $r$ remains
+the covariate index.
+
+Several manuscript symbols have different local meanings.
+Section 2.1 uses $M$ for the number of Fourier features; we call
+that number $P_f$ to distinguish it from subjects.
+Its QMC coefficients, also called $\gamma$ there, are not the
+Stage 1 global coefficients.
+Supplement S1.1 calls its $M\times R$ logistic design $X$ and
+its voxelwise coefficient $\beta_j$; our comparator uses the
+main-text names $Z$ and $\varphi_j$, with this mapping stated again
+in Section~\ref{lesion-logistic}.
+Supplement S2.2 reuses $B,M,R,S,Z$ for sandwich and QR quantities;
+we distinguish those from the spatial basis, dimensions, contrasts,
+and study design below.
+Supplement S2.3 reverses the Kronecker order and reuses $\alpha$
+as an intercept; its local convention is translated explicitly in
+Section~\ref{lesion-toy-variance}.
+
+\subsection{Data and stacking convention}
+There are $M$ independent subjects and $N$ voxels.
+Subject $i$ supplies a binary image
+$Y_i=(Y_{i1},\ldots,Y_{iN})^\top$, $Y_{ij}\in\{0,1\}$.
+Independence \emph{within} an image is a working-likelihood assumption,
+not a consequence of smoothing its mean.
+Let $\widetilde Y\in\R^{M\times N}$ store the images by row.
+Stack subjects slowest:
+$Y=(Y_1^\top,\ldots,Y_M^\top)^\top=\vr(\widetilde Y)$.
+For any matrix, $\vr$ stacks rows in order, equivalently applying
+ordinary column-vectorization to its transpose.
+
+The fixed subject design is $Z\in\R^{M\times R}$ and the fixed
+spatial basis is $B\in\R^{N\times P}$.
+Rows are $Z_i^\top$ and $B_j^\top$; $Z_i\in\R^R$ and $B_j\in\R^P$
+are columns. Stack the $R$ spatial maps as
+\[
+ \beta=(\beta_1^\top,\ldots,\beta_R^\top)^\top\in\R^{RP},
+ \quad
+ \widetilde\beta=\begin{pmatrix}\beta_1^\top\\ \vdots\\\beta_R^\top\end{pmatrix},
+ \quad \beta=\vr(\widetilde\beta).
+\]
+The model corresponding to manuscript (2.6)--(2.7) is
+\begin{align}
+ \eta_{ij}=\log\mu_{ij}
+ &=\sum_{r=1}^R Z_{ir}B_j^\top\beta_r
+   =(Z_i^\top\otimes B_j^\top)\beta,\\
+ \widetilde\eta&=Z\widetilde\beta B^\top\in\R^{M\times N},\\
+ \eta&=(Z\otimes B)\beta=X\beta,\qquad X\in\R^{MN\times RP}.
+ \label{lesion-design}
+\end{align}
+Here $\widetilde\eta$ is the \emph{array of log means}, not a Hessian.
+The study design is $X_i=Z_i^\top\otimes B\in\R^{N\times RP}$.
+Let $x_{ij}=Z_i\otimes B_j$ be a cell design column.
+The number of regression coefficients is $d=RP$.
+
+The coefficient of covariate $Z_{ir}$ at voxel $j$ is
+$\varphi_{jr}=B_j^\top\beta_r$, component $r$ of the paper's
+$\varphi_j$. Thus $\partial\eta_{ij}/\partial Z_{ir}=\varphi_{jr}$.
+An intercept column of $Z$ supplies a baseline map, not an additional
+constant global covariate effect. A common smooth basis reduces the
+number of coefficients but does not itself specify residual spatial
+covariance between $Y_{ij}$ and $Y_{ik}$.
+
+\subsection{Derive the coefficient order rather than assuming a vec convention}
+The cell $(i,j)$ has stacked row index $(i-1)N+j$, and the
+coefficient $(r,p)$ has index $(r-1)P+p$.
+By the definition of a Kronecker product,
+\[
+ (Z\otimes B)_{(i-1)N+j,\,(r-1)P+p}=Z_{ir}B_{jp}.
+\]
+Multiplication by $\beta=\vr(\widetilde\beta)$ therefore gives
+$\sum_{r,p}Z_{ir}\widetilde\beta_{rp}B_{jp}$, which is exactly
+$(Z\widetilde\beta B^\top)_{ij}$.
+This proves both (2.7)'s subject-major stacking and the paper's
+$R\times P$ reshape convention.
+
+More generally, if $A$ is $R\times R$, $K$ is $P\times P$,
+and $D$ is $R\times P$, then
+\[
+ (ADK)_{rp}=\sum_{q,l}A_{rq}D_{ql}K_{lp}.
+\]
+The coefficient multiplying $D_{ql}$ is
+$(A\otimes K^\top)_{(r-1)P+p,\,(q-1)P+l}$, proving
+\[
+ \vr(ADK)=(A\otimes K^\top)\vr(D).
+\]
+Ordinary column-vectorization of that same $R\times P$ array
+would interchange the coefficient order. It is valid only with
+the corresponding permutation of the design and covariance.
+
+\subsection{Spline and QMC bases are fixed design choices}
+For coordinates $s_j=(x_j,y_j,z_j)^\top$ a tensor spline column
+is indexed by $(a,b,c)$:
+\[
+ B_{j,(a,b,c)}
+ =B_a^{(x)}(x_j)B_b^{(y)}(y_j)B_c^{(z)}(z_j).
+\]
+Then $B_j^\top\beta_r$ is the triple sum of these products times
+the corresponding map coefficients, recovering (2.1)--(2.2).
+This uses the paper's uppercase univariate basis functions.
+Its generic voxel index $i$ in Section 2.1 is changed to $j$ here,
+so that $i$ consistently indexes subjects in the regression.
+Its generic spline coefficient $\omega_{abc}$ becomes the
+corresponding component of $\beta_r$ for covariate map $r$.
+On a full rectangular grid the full basis can itself be built by
+Kronecker products. Masking voxels or dropping weakly supported
+columns does not preserve every such full-grid factorization.
+This spatial tensor construction is distinct from $X=Z\otimes B$.
+
+For $P_f$ fixed Fourier features, the manuscript's alternative has
+\[
+ B_{jk}=\sqrt{2/P_f}\cos(\omega_k^\top s_j+b_k),\quad k=1,\ldots,P_f.
+\]
+Thus $B_j=\varphi_{\rm QMC}(s_j)$ before any additional intercept
+column is appended. The same feature vector in (2.3) is multiplied
+by a generic coefficient vector; the spatial GLM supplies one such
+vector $\beta_r$ for each covariate.
+The frequencies and phases are generated before regression and held
+fixed; an added intercept, if independent, increases $P$ by one.
+For clarity $P_f$ counts features, avoiding the manuscript Section 2.1
+reuse of $M$, which here always counts subjects.
+Conditioning on this basis, every regression derivative below is
+identical for splines and Fourier features.
+No differentiation through a chosen knot grid or QMC sequence is involved.
+
+An intercept should not be appended blindly: a complete partition-of-unity
+spline basis already spans the constant function.
+If $Bc_B=\mathbf1_N$, adding another constant column makes the basis
+rank deficient unless a redundant direction is removed.
+For full-column-rank $Z,B$,
+$\operatorname{rank}(Z\otimes B)=\operatorname{rank}(Z)\operatorname{rank}(B)=RP$.
+Having a constant direction in both factors does not itself duplicate
+the intercept in the \emph{tensor-product} design.
+The additive initialization has a different intercept problem,
+derived in Section~\ref{lesion-initialization}.
+
+\section{Binary observations: count working models versus normalized binary models}
+\label{lesion-binary}
+
+\subsection{What conditioning a Poisson count on zero or one changes}
+For $Y\sim\operatorname{Poisson}(\lambda)$,
+$P(Y=0)=e^{-\lambda}$ and $P(Y=1)=\lambda e^{-\lambda}$.
+After explicitly conditioning on $Y\in\{0,1\}$,
+\[
+ P(Y=1\mid Y\le1)=\frac{\lambda}{1+\lambda},\qquad
+ P(Y=0\mid Y\le1)=\frac1{1+\lambda}.
+\]
+With $\lambda=e^\eta$, the conditional probability is logistic:
+$p=e^\eta/(1+e^\eta)$. This is the exact conditioning calculation
+underlying manuscript S1.2.
+But observing only zeros and ones is not itself an instruction to
+condition the count likelihood.
+For an observed $y\in\{0,1\}$ the two log-likelihoods are
+\begin{align}
+ \ell_{\rm count}(\eta)&=y\eta-e^\eta,\\
+ \ell_{\rm conditional}(\eta)
+ &=\ell_{\rm count}(\eta)
+     -\log P_\eta(Y\le1)\\
+ &=y\eta-e^\eta-\{-e^\eta+\log(1+e^\eta)\}\\
+ &=y\eta-\log(1+e^\eta).
+ \label{lesion-conditioned-poisson}
+\end{align}
+Their difference, $e^\eta-\log(1+e^\eta)$, is parameter-dependent.
+Consequently their scores and Hessians differ.
+The manuscript's (2.8) uses the unconditioned count objective;
+it is not made identical to logistic regression by restricting
+the observed dataset to zero and one.
+
+For small $\lambda$,
+$\lambda/(1+\lambda)=\lambda-\lambda^2+O(\lambda^3)$ and
+$\log(1+\lambda)=\lambda-\lambda^2/2+O(\lambda^3)$.
+This gives a low-rate approximation, not equality of the fitted objectives.
+Under the unconditioned count model, $\mu=e^\eta$ is an intensity
+and is not constrained below one. If it is interpreted as a
+Bernoulli mean, fitted values must satisfy that additional scientific
+requirement; clipping them after fitting changes neither the fitted
+likelihood nor its derivative correctly.
+
+\subsection{The same issue for NB evaluated on binary data}
+For an NB count with mean $\mu$ and dispersion $\alpha>0$,
+\[
+ P(Y=0)=(1+\alpha\mu)^{-1/\alpha},\quad
+ \frac{P(Y=1)}{P(Y=0)}=\frac{\mu}{1+\alpha\mu}.
+\]
+Normalizing these two masses would give
+\begin{equation}
+ p_{\rm conditional}
+ =\frac{\mu}{1+(1+\alpha)\mu},\qquad
+ \operatorname{logit}(p_{\rm conditional})
+ =\log\mu-\log(1+\alpha\mu).
+\end{equation}
+That is a different binary model, with a nonlinear predictor in
+$\eta=\log\mu$. Its normalization must not be silently added to the
+NB working likelihood in manuscript (2.10).
+The following NB derivatives refer to that \emph{unconditioned count}
+working likelihood evaluated on binary observations.
+
+If the true conditional data are Bernoulli with mean $p$,
+$\Var(Y\mid Z)=p(1-p)<p$ for $0<p<1$.
+Thus $\mu+\alpha\mu^2$ with $\alpha>0$ cannot be the literal
+conditional variance of a binary response with the same mean.
+Pooled heterogeneity or within-subject spatial dependence can still
+make a working independent model inadequate, but these are not
+positive Bernoulli conditional dispersion parameters.
+The working-model covariance and a subject-robust covariance therefore
+need separate interpretations.
+
+\section{A common chain rule for spatial coefficient maps}
+\label{lesion-chain}
+
+\subsection{Differentiate the predictor before the likelihood}
+For coordinate $a=(r-1)P+p$,
+\[
+ \frac{\partial\eta_{ij}}{\partial\beta_a}=Z_{ir}B_{jp}=x_{ij,a},
+ \qquad
+ \frac{\partial^2\eta_{ij}}{\partial\beta_a\partial\beta_b}=0.
+\]
+Because $\mu_{ij}=e^{\eta_{ij}}$,
+\[
+ \partial_{\beta_a}\mu_{ij}=\mu_{ij}x_{ij,a},\quad
+ \partial^2_{\beta_a\beta_b}\mu_{ij}=\mu_{ij}x_{ij,a}x_{ij,b}.
+\]
+For a scalar likelihood $f(\mu)$, this means
+\[
+ f_{\eta}=\mu f_\mu,\qquad
+ f_{\eta\eta}=\mu^2f_{\mu\mu}+\mu f_\mu.
+\]
+The final term is essential: the log predictor is affine, but
+the mean itself is not.
+
+\subsection{Score, log-likelihood Hessian, and observed information}
+Write the working log-likelihood as
+$\ell(\beta)=\sum_{i,j}f_{ij}(\eta_{ij})$.
+Set $s_{ij}=f'_{ij}$ and $w_{ij}=-f''_{ij}$.
+Differentiating first and second gives
+\begin{align}
+ U_a=\partial_{\beta_a}\ell
+ &=\sum_{i,j}s_{ij}x_{ij,a},\\
+ \partial_{\beta_b}U_a
+ &=\sum_{i,j}\{f''_{ij}x_{ij,b}x_{ij,a}
+                +s_{ij}\partial_{\beta_b}x_{ij,a}\}\\
+ &=-\sum_{i,j}w_{ij}x_{ij,a}x_{ij,b}.
+\end{align}
+Define $H=-\nabla_\beta^2\ell$ and $I=\E_\beta H$.
+Then
+\begin{align}
+ U&=\sum_i X_i^\top s_i,\\
+ H&=\sum_iX_i^\top\diag(w_i)X_i,\\
+ H_{\beta_r\beta_{r'}}
+ &=\sum_iZ_{ir}Z_{ir'}B^\top\diag(w_i)B,\\
+ H_{(r,p),(r',p')}
+ &=\sum_i\sum_jZ_{ir}Z_{ir'}B_{jp}B_{jp'}w_{ij}.
+ \label{lesion-hessian-entry}
+\end{align}
+The actual \emph{log-likelihood Hessian} is the negative of every
+displayed information block. The scalar weights determine the
+observation family; the spatial projection is unchanged.
+
+For implementation, compute $\widetilde B_{jp}=w_{ij}B_{jp}$
+and $B^\top\widetilde B$ rather than constructing an $N\times N$
+diagonal matrix. Assemble studies or batches without building $X$.
+A dense weighted basis product costs $O(NP^2)$ and uses an $N\times P$
+workspace. Dense $RP\times RP$ information still costs $O((RP)^2)$
+storage; avoiding the large design does not remove that cost.
+
+\subsection{An exact matrix-free Hessian--vector product}
+For a direction $v\in\R^{RP}$, let
+$\widetilde v\in\R^{R\times P}$ satisfy $v=\vr(\widetilde v)$.
+The directional change in the log mean has array
+\[
+ \widetilde q=Z\widetilde v B^\top,\qquad
+ \widetilde q_{ij}=x_{ij}^\top v.
+\]
+Multiply \eqref{lesion-hessian-entry}'s full sum by $v$:
+\begin{align}
+ Hv&=\sum_{i,j}w_{ij}x_{ij}(x_{ij}^\top v)\\
+   &=\vr\!\left[
+       Z^\top\{\widetilde w\mathbin{\odot}
+                     (Z\widetilde v B^\top)\}B\right],
+ \qquad \widetilde w=(w_{ij})_{i,j}.
+ \label{lesion-hvp}
+\end{align}
+The symbol $\odot$ is elementwise multiplication; $\widetilde w$
+is an array, whereas the paper's $W$ is the stacked diagonal
+matrix. This identity is exact for observed Poisson or NB
+regression curvature at fixed dispersion. Substituting Fisher
+weights gives $Iv$ instead.
+Its quadratic form is
+$v^\top Hv=\sum_{ij}w_{ij}(x_{ij}^\top v)^2$, displaying symmetry
+and positive semidefiniteness without forming any dense Hessian.
+
+Subject/voxel batches can accumulate the projected products without
+storing $X$, $H$, or all of $\widetilde q$.
+With the indicated multiplication order, one dense product costs
+$O(MRP+MNP)$, aside from obtaining the current weights.
+For identified SPD information, an iterative linear solver with
+these products and the separable preconditioner can compute a
+direction or selected covariance column without dense information
+storage. This changes the numerical solve, not the likelihood.
+Residual convergence and information rank still matter; the
+preconditioner alone is not the final covariance.
+
+\section{Poisson working likelihood: scalar and spatial Hessian derivations}
+
+\subsection{From the mass function to the second derivative}
+The mass function and log-likelihood are
+\[
+ P(Y=y)=\frac{e^{-\mu}\mu^y}{y!},\qquad
+ f(\eta)=y\eta-e^\eta-\log\Gamma(y+1).
+\]
+When $y=0$ or $1$, $\log\Gamma(y+1)=0$, giving (2.8).
+Differentiate at fixed data:
+\begin{align}
+ f_\eta&=y-e^\eta=y-\mu,\\
+ f_{\eta\eta}&=-e^\eta=-\mu,\\
+ U&=\sum_{i,j}(Z_i\otimes B_j)(Y_{ij}-\mu_{ij}),\\
+ H&=\sum_i(Z_iZ_i^\top)\otimes
+                     \{B^\top\diag(\mu_i)B\}.
+ \label{lesion-poisson-h}
+\end{align}
+No count appears explicitly in $H$ at a fixed parameter value.
+$H(\widehat\beta)$ still depends on the data through the fitted coefficient.
+The count-model expectation gives $I=H$.
+
+Under the correctly specified independent Poisson model,
+\[
+ \Var(U)=\sum_{i,j}x_{ij}x_{ij}^\top\Var(Y_{ij})
+        =\sum_{i,j}\mu_{ij}x_{ij}x_{ij}^\top=I.
+\]
+Under actual binary or spatially correlated data, the algebraic
+Hessian is unchanged but this information equality need not hold.
+
+\subsection{Exact score as a small projected matrix}
+Let $\widetilde\mu_{ij}=\mu_{ij}$ and $R_Y=\widetilde Y-\widetilde\mu$.
+For the $(r,p)$ coefficient the score is
+$\sum_i Z_{ir}\sum_j(R_Y)_{ij}B_{jp}$.
+This is entry $(r,p)$ of $Z^\top R_YB$, so
+\begin{equation}\label{lesion-score-matrix}
+ U=\vr\{Z^\top(\widetilde Y-\widetilde\mu)B\}.
+\end{equation}
+In particular $X^\top Y=\vr(Z^\top\widetilde YB)$.
+This equality fixes the vectorization convention left implicit in some
+of the manuscript's formulas; using column-wise $\operatorname{vec}$
+of the $R\times P$ matrix would order the coefficients differently.
+The count projection can be precomputed for a fixed design, while the
+mean projection must be updated at each exact score evaluation.
+
+\section{Independent NB working likelihood: binary simplification and derivatives}
+\label{lesion-nb}
+
+\subsection{General NB2 likelihood and exact binary cancellation}
+Let $\nu=\alpha^{-1}$, with the manuscript's single dispersion
+$\alpha>0$ shared over subjects and voxels. The NB2 mass is
+\[
+ P(Y=y)=\frac{\Gamma(y+\nu)}{\Gamma(\nu)\Gamma(y+1)}
+      \left(\frac{\nu}{\nu+\mu}\right)^\nu
+      \left(\frac\mu{\nu+\mu}\right)^y.
+\]
+Its mean and variance under that count model are $\mu$ and
+$\mu+\alpha\mu^2$.
+The scalar log-likelihood is
+\begin{align}
+ f={}&\log\Gamma(y+\nu)-\log\Gamma(\nu)-\log\Gamma(y+1)
+       +\nu\log\nu+y\eta-(y+\nu)\log(\nu+e^\eta).
+\end{align}
+For binary $y$,
+$\log\Gamma(y+\nu)-\log\Gamma(\nu)=y\log\nu$.
+Also $\log\Gamma(y+1)=0$ and
+$\log(\nu+\mu)=\log\nu+\log(1+\alpha\mu)$.
+Substituting each term,
+\begin{align}
+ f&=y\log\nu+\nu\log\nu+y\eta
+          -(y+\nu)\{\log\nu+\log(1+\alpha\mu)\}\\
+  &=y\eta-(y+\alpha^{-1})\log(1+\alpha\mu)\\
+  &=y\log\left(\frac\mu{1+\alpha\mu}\right)
+                  -\alpha^{-1}\log(1+\alpha\mu).
+ \label{lesion-binary-nb}
+\end{align}
+This derives manuscript (2.10) and (S1.34), including the cancellations.
+It is an exact simplification of the NB \emph{count mass} at
+binary observations, not a change in the normalization of that mass.
+
+\subsection{First derivative at fixed original dispersion}
+Since $\partial_\eta\mu=\mu$,
+\begin{align}
+ f_\eta
+ &=y-(y+\alpha^{-1})\frac{\alpha\mu}{1+\alpha\mu}\\
+ &=\frac{y(1+\alpha\mu)-(1+\alpha y)\mu}{1+\alpha\mu}\\
+ &=\frac{y-\mu}{1+\alpha\mu}.
+ \label{lesion-nb-score}
+\end{align}
+The denominator is present even for binary $y$ and even though
+the link is logarithmic.
+
+\subsection{Quotient rule for observed curvature}
+Differentiate numerator and denominator separately:
+\begin{align}
+ f_{\eta\eta}
+ &=\frac{(-\mu)(1+\alpha\mu)-(y-\mu)\alpha\mu}
+           {(1+\alpha\mu)^2}\\
+ &=-\frac{\mu+\alpha\mu^2+\alpha\mu y-\alpha\mu^2}
+                {(1+\alpha\mu)^2}\\
+ &=-\frac{\mu(1+\alpha y)}{(1+\alpha\mu)^2}.
+\end{align}
+Thus
+\begin{align}
+ w_{ij}^{\rm obs}
+ &=\frac{\mu_{ij}(1+\alpha Y_{ij})}{(1+\alpha\mu_{ij})^2},\\
+ H_{\beta_r\beta_{r'}}
+ &=\sum_i Z_{ir}Z_{ir'} B^\top\diag(w_i^{\rm obs})B,\\
+ U_{\beta_r}
+ &=\sum_iZ_{ir}B^\top
+          \left\{\frac{Y_i-\mu_i}{1+\alpha\mu_i}\right\}.
+ \label{lesion-nb-full}
+\end{align}
+Vector division is elementwise. These are independent-cell NB
+derivatives; there is no aggregation across subjects and no shared
+gamma multiplier inducing a rank-one voxel correction.
+For fixed positive $\alpha$, $w^{\rm obs}>0$.
+Consequently the negative log-likelihood is convex in the affine
+regression coefficients and strictly convex when $X$ has full column
+rank. Existence of a finite optimum and joint convexity with dispersion
+are separate questions.
+
+\subsection{Expected information and what it assumes}
+Taking an expectation under the NB working distribution gives
+\begin{align}
+ w^{\rm F}
+ &=\frac{\mu(1+\alpha\E Y)}{(1+\alpha\mu)^2}
+   =\frac{\mu}{1+\alpha\mu},\\
+ I&=\sum_i X_i^\top\diag\left(\frac{\mu_i}{1+\alpha\mu_i}\right)X_i.
+ \label{lesion-nb-fisher}
+\end{align}
+These are manuscript (2.17)'s weights. Independently,
+\[
+ \Var_{\rm NB}(f_\eta)
+ =\frac{\mu+\alpha\mu^2}{(1+\alpha\mu)^2}
+ =\frac{\mu}{1+\alpha\mu}.
+\]
+The expectation of the observed weight uses only the mean, so it
+also gives the expected sensitivity of this working score under
+another distribution with the same mean.
+The variance identity does \emph{not} then follow automatically.
+For a truly independent Bernoulli cell with mean $\mu<1$,
+\[
+ \Var_{\rm Bernoulli}(f_\eta)
+ =\frac{\mu(1-\mu)}{(1+\alpha\mu)^2},
+\]
+and a whole subject may have additional covariance between its cells.
+This is precisely why sensitivity and score variability must be
+separated in a robust calculation.
+
+\subsection{Dispersion derivatives, transformations, and the boundary}
+Using the general NB likelihood, define
+$\psi(t)=d\log\Gamma(t)/dt$ and $\psi_1(t)=d\psi(t)/dt$.
+At fixed $\mu$,
+\begin{align}
+ f_\nu&=\psi(y+\nu)-\psi(\nu)+\log\nu+1-\log(\nu+\mu)
+                                       -\frac{y+\nu}{\nu+\mu},\\
+ f_{\nu\nu}&=\psi_1(y+\nu)-\psi_1(\nu)+\frac1\nu-\frac1{\nu+\mu}
+                                       -\frac{\mu-y}{(\nu+\mu)^2},\\
+ f_{\eta\nu}
+ &=\partial_\nu\left\{\frac{\nu(y-\mu)}{\nu+\mu}\right\}
+   =\frac{\mu(y-\mu)}{(\nu+\mu)^2}.
+ \label{lesion-nuisance-r}
+\end{align}
+For the binary-specialized likelihood \eqref{lesion-binary-nb},
+one can also avoid the gamma functions entirely. Put $h=1+\alpha\mu$:
+\begin{align}
+ f_\alpha
+ &=\alpha^{-2}\log h-(y+\alpha^{-1})\mu/h,\\
+ f_{\alpha\alpha}
+ &=-2\alpha^{-3}\log h+2\alpha^{-2}\mu/h
+                       +(y+\alpha^{-1})\mu^2/h^2,\\
+ f_{\eta\alpha}&=-\mu(y-\mu)/h^2.
+ \label{lesion-nuisance-alpha}
+\end{align}
+For example the two $\alpha^{-2}\mu/h$ terms in the second
+derivative come from differentiating $\log h$ in the first term
+and $\alpha^{-1}$ in the second.
+These formulas agree with $\nu=1/\alpha$ and the full chain rule.
+Assemble $H_{\beta\alpha}=-\sum_{i,j}x_{ij}f_{\eta\alpha}$
+and $H_{\alpha\alpha}=-\sum_{i,j}f_{\alpha\alpha}$.
+
+For $\delta=\log\alpha$, differentiation gives
+\[
+ f_\delta=\alpha f_\alpha,\quad
+ f_{\delta\delta}=\alpha^2f_{\alpha\alpha}+\alpha f_\alpha,
+ \quad H_{\delta\delta}
+ =\alpha^2H_{\alpha\alpha}-\alpha U_\alpha.
+\]
+The extra score term is not zero away from an interior stationary point.
+Holding $\widehat\alpha$ fixed while calculating
+\eqref{lesion-nb-full} does not propagate dispersion uncertainty.
+The Poisson limit $\alpha\downarrow0$ recovers $s=y-\mu$ and
+$w^{\rm obs}=w^{\rm F}=\mu$, but $\alpha=0$ is a boundary,
+not an interior value of $\delta$. Joint Wald inference at that
+boundary is not justified by the preceding interior derivatives.
+
+\section{The manuscript's separable initialization, not its final model}
+\label{lesion-initialization}
+
+\subsection{Additive predictor and identification}
+Stage 1 of manuscript Algorithm 1 uses a Poisson fit with
+\[
+ \eta_{ij}^{(0)}=B_j^\top\xi+Z_i^\top\gamma,\qquad
+ \mu_j^B=e^{B_j^\top\xi},\quad \mu_i^Z=e^{Z_i^\top\gamma},\quad
+ \mu_{ij}^{(0)}=\mu_i^Z\mu_j^B.
+\]
+These are the manuscript's $\mu^B$ and $\mu^Z$, not the
+$\mu^X$ factors used in the other paper.
+The dimensionally explicit version of (2.11) is
+\[
+ \eta^{(0)}=(\mathbf1_M\otimes B)\xi
+                      +(Z\otimes\mathbf1_N)\gamma.
+\]
+The unstacked components $\eta_B=B\xi$ and $\eta_Z=Z\gamma$
+have lengths $N$ and $M$ and must be broadcast this way before
+they can be added.
+This has $P+R$ nominal coefficients, not $PR$.
+Here $\gamma$ is globally constant across voxels and is only the
+initialization parameterization; the final $\beta_r$ are spatial maps.
+
+If $Bc_B=\mathbf1_N$ and $Zc_Z=\mathbf1_M$, the transformation
+$\xi\mapsto\xi+tc_B$, $\gamma\mapsto\gamma-tc_Z$ leaves every
+$\eta_{ij}^{(0)}$ unchanged.
+Therefore an unconstrained additive fit with both intercepts is
+unidentified. Remove the global intercept for Stage 1 or impose an
+explicit equivalent constraint.
+Centering the nonconstant covariates does not remove a separately
+included global intercept.
+
+\subsection{Exact compression into two count marginals}
+Introduce auxiliary count margins
+$Y_B=\widetilde Y^\top\mathbf1_M$ and
+$Y_Z=\widetilde Y\mathbf1_N$, of lengths $N$ and $M$.
+Thus $(Y_B)_j=\sum_iY_{ij}$ and $(Y_Z)_i=\sum_jY_{ij}$.
+Define $h_B=\sum_j\mu_j^B$ and $h_Z=\sum_i\mu_i^Z$.
+Substituting the additive predictor into the full Poisson objective,
+\begin{align}
+ \ell_0
+ &=\sum_{i,j}Y_{ij}(B_j^\top\xi+Z_i^\top\gamma)
+                         -\sum_{i,j}\mu_i^Z\mu_j^B+c(Y)\\
+ &=Y_B^\top B\xi+Y_Z^\top Z\gamma-h_Bh_Z+c(Y).
+ \label{lesion-initial-ll}
+\end{align}
+The two count marginals suffice for evaluating this likelihood.
+Fitting only $(Y_B)_j\sim\operatorname{Poisson}(h_Z\mu_j^B)$
+would drop $\sum_i (Y_Z)_i\log(\mu_i^Z/h_Z)$, which generally depends on
+$\gamma$. Exact compression is not the same as discarding the
+allocation of counts among subjects.
+
+\subsection{Scores and all initialization Hessian blocks}
+Set
+\begin{align*}
+ W_B&=\diag(\mu^B),& W_Z&=\diag(\mu^Z),\\
+ a&=B^\top\mu^B,& t&=Z^\top\mu^Z,\\
+ K_B&=B^\top W_BB,& K_Z&=Z^\top W_ZZ.
+\end{align*}
+Exponential differentiation gives
+$\nabla_\xi h_B=a$, $\nabla_\xi^2h_B=K_B$,
+$\nabla_\gamma h_Z=t$, and $\nabla_\gamma^2h_Z=K_Z$.
+Differentiate \eqref{lesion-initial-ll} once:
+\[
+ U_\xi=B^\top Y_B-h_Za,\qquad
+ U_\gamma=Z^\top Y_Z-h_Bt.
+\]
+Then differentiate the two scores:
+\begin{align}
+ -\partial_\xi U_\xi&=h_ZK_B,\qquad
+ -\partial_\gamma U_\xi=a t^\top,\\
+ -\partial_\gamma U_\gamma&=h_BK_Z,\\
+ H_0&=\begin{pmatrix}h_ZK_B&a t^\top\\t a^\top&h_BK_Z\end{pmatrix}.
+\end{align}
+These formulas are written in nominal $(\xi,\gamma)$ coordinates.
+If the global intercept is redundant, impose the chosen constraint
+before solving: for $(\xi^\top,\gamma^\top)^\top=J_0\vartheta$
+with fixed full-column-rank constraint map $J_0$, use score
+$J_0^\top(U_\xi^\top,U_\gamma^\top)^\top$ and information
+$J_0^\top H_0J_0$. Deleting a redundant coordinate is one such map.
+The constrained information is not the $PR\times PR$ information
+of the full spatially varying model at the same means.
+
+\subsection{Embedding a separable fit in the full coefficient maps}
+Suppose $Ze_0=\mathbf1_M$ selects the full model's intercept column,
+and $Bc_B=\mathbf1_N$.
+Pad the identifiable Stage 1 global vector with zero in its
+removed intercept coordinate and call it $\widehat\gamma$.
+Define
+\begin{equation}
+ \widetilde\beta^{(0)}=e_0\widehat\xi^\top+\widehat\gamma c_B^\top,\qquad
+ \beta^{(0)}=\vr(\widetilde\beta^{(0)}).
+ \label{lesion-embedding}
+\end{equation}
+Multiplication checks the initialization:
+\[
+ Z\widetilde\beta^{(0)}B^\top
+ =\mathbf1_M(B\widehat\xi)^\top
+           +(Z\widehat\gamma)\mathbf1_N^\top.
+\]
+Thus it exactly reproduces the separable log means.
+The shorthand $\beta^{(0)}\leftarrow\widehat\xi$ in Algorithm 1
+cannot literally assign a $P$-vector to a $PR$-vector.
+Equation \eqref{lesion-embedding} supplies a dimensionally complete
+embedding that also retains the fitted global effects.
+If the required intercept directions are not spanned, an explicit
+projection is needed and the embedding is no longer exact.
+Stage 1 is Poisson, so it does not itself estimate an NB dispersion;
+Stage 2 must specify a positive starting $\alpha$ or a separate
+dispersion fit rather than inherit a nonexistent Poisson estimate.
+
+\section{Exact scoring and the Kronecker preconditioner}
+\label{lesion-preconditioner}
+
+\subsection{Newton and Fisher directions with the correct family score}
+A Taylor expansion of the score equation gives
+$0\approx U(\beta)-H(\beta)\Delta$, hence the Newton direction
+$\Delta=H^{-1}U$.
+Fisher scoring uses $\Delta=I^{-1}U$ instead.
+The two family scores are
+\[
+ U_{\rm P}=X^\top(Y-\mu),\qquad
+ U_{\rm NB}=X^\top\diag\{(1+\alpha\mu)^{-1}\}(Y-\mu).
+\]
+For either family define the IRLS working response
+$z^*=\eta+(Y-\mu)/\mu$.
+For Poisson $W=\diag(\mu)$ and for NB
+$W=\diag\{\mu/(1+\alpha\mu)\}$.
+Then
+\[
+ X^\top W(z^*-\eta)
+ =\begin{cases}
+ X^\top(Y-\mu),&\text{Poisson},\\
+ X^\top\{(Y-\mu)/(1+\alpha\mu)\},&\text{NB}.
+ \end{cases}
+\]
+Solving $X^\top WX\,\Delta=X^\top W(z^*-\eta)$ therefore
+reproduces the family-specific Fisher direction.
+The numerator in manuscript (2.12) and Algorithm 1 is correct
+for Poisson, but must carry the NB residual denominator if it
+is intended as NB likelihood Fisher scoring.
+
+\subsection{Deriving the exact factorization at separable Poisson means}
+At $\mu_{ij}^{(0)}=\mu_i^Z\mu_j^B$, the stacked diagonal weights satisfy
+$W_0=W_Z\otimes W_B=\diag(\mu^Z)\otimes\diag(\mu^B)$.
+Using $(A\otimes B)(C\otimes D)=AC\otimes BD$ twice,
+\begin{align}
+ P_0=X^\top W_0X
+ &=(Z^\top\otimes B^\top)
+       \{W_Z\otimes W_B\}(Z\otimes B)\\
+ &=\{Z^\top W_ZZ\}\otimes\{B^\top W_BB\}\\
+ &=K_Z\otimes K_B.
+ \label{lesion-kron}
+\end{align}
+If both factors are nonsingular, multiplication proves
+$P_0^{-1}=K_Z^{-1}\otimes K_B^{-1}$.
+This is the $PR$-dimensional full-model Poisson information
+\emph{evaluated at} the separable means, not $H_0$ above.
+When later means cease to be separable, it is a fixed preconditioner,
+not the current exact information.
+
+One can solve $P_0d=g$ without forming the Kronecker matrix.
+Reshape $g=\operatorname{vec}(G)$ and $d=\operatorname{vec}(D)$
+with $G,D\in\R^{P\times R}$, so their column stacking matches
+the map-major $\beta$ order.
+Then
+\[
+ (K_Z\otimes K_B)\operatorname{vec}(D)
+  =\operatorname{vec}(K_BDK_Z^\top)=\operatorname{vec}(G).
+\]
+Solve $K_BW=G$, followed by $K_ZD^\top=W^\top$.
+Factorization costs $O(P^3+R^3)$, with $O(P^2+R^2)$ factor
+storage, rather than a dense $O((PR)^3)$ factorization.
+
+\subsection{Why separable NB means do not give these exact weights}
+NB Fisher weights at the same means are
+$w_{ij}=\mu_i^Z\mu_j^B/(1+\alpha\mu_i^Z\mu_j^B)$.
+For study factors $a,b$ and voxel factors $c,d$, their determinant is
+\begin{align}
+ &\frac{ac}{1+\alpha ac}\frac{bd}{1+\alpha bd}
+   -\frac{ad}{1+\alpha ad}\frac{bc}{1+\alpha bc}\\
+ &=\frac{\alpha abcd(a-b)(d-c)}
+ {(1+\alpha ac)(1+\alpha ad)(1+\alpha bc)(1+\alpha bd)}.
+\end{align}
+It is generally nonzero, whereas a separable two-by-two weight grid
+has determinant zero. Thus manuscript (2.13)'s Poisson products
+are not an exact NB weight factorization.
+One may deliberately use $P_0$ as an SPD approximation for NB,
+but the NB score and final information must retain their own formulas.
+
+\subsection{What a fixed preconditioner can and cannot guarantee}
+For a maximized objective $\ell$ and $P_0\succ0$, the direction
+$d=P_0^{-1}U$ satisfies $U^\top d=U^\top P_0^{-1}U>0$
+unless $U=0$. This is a local ascent direction.
+A full step of length one need not increase $\ell$.
+For example, maximize $\ell(b)=-h b^2/2$ using scalar $P_0=p>0$:
+\[
+ b_{\rm new}=b+p^{-1}(-hb)=(1-h/p)b.
+\]
+Convergence requires $|1-h/p|<1$, equivalently $0<h/p<2$.
+Positive $p$ alone does not imply that inequality.
+Line search, damping, or other suitable optimization conditions are
+needed for a convergence guarantee. The same caveat applies before
+introducing a Taylor approximation to the score.
+
+\section{Subject-centered Taylor approximation: complete derivation}
+\label{lesion-taylor}
+
+\subsection{Average log mean and centered predictor}
+Define
+\[
+ \bar z=Z^\top\mathbf1_M/M,\quad
+ Q_M=I_M-\mathbf1_M\mathbf1_M^\top/M,\quad
+ \widetilde Z=Q_MZ,\quad \bar\eta=B\widetilde\beta^\top\bar z.
+\]
+Here $\widetilde Z$ has the paper's intended meaning: the centered
+$M\times R$ covariate matrix. The centering matrix $Q_M$ alone
+is $M\times M$ and is not $\widetilde Z$; the right multiplication
+by $Z$ is needed in the definition printed after (2.14).
+Then
+\[
+ Z=\mathbf1_M\bar z^\top+\widetilde Z,\qquad
+ \widetilde\eta=\mathbf1_M\bar\eta^\top+\Delta,\qquad
+ \Delta=\widetilde Z\widetilde\beta B^\top.
+\]
+For each voxel, $\sum_i\Delta_{ij}=0$.
+Let $a_j=e^{\bar\eta_j}$ and $a=\exp(\bar\eta)$.
+Importantly,
+$a_j=\exp(M^{-1}\sum_i\eta_{ij})$ is not generally the
+subject-average mean $M^{-1}\sum_i e^{\eta_{ij}}$.
+Jensen's inequality gives $a_j\le M^{-1}\sum_i\mu_{ij}$.
+
+\subsection{Scalar Taylor expansion with a remainder}
+Because $\mu_{ij}=a_j e^{\Delta_{ij}}$, expand the scalar exponential:
+\begin{align}
+ \mu_{ij}
+ &=a_j(1+\Delta_{ij})+\mathcal R_{ij},\\
+ \mathcal R_{ij}
+ &=\frac12a_j e^{t_{ij}}\Delta_{ij}^2,\qquad
+ t_{ij}\text{ lies between }0\text{ and }\Delta_{ij},\\
+ 0\le\mathcal R_{ij}
+ &\le\frac12a_j e^{|\Delta_{ij}|}\Delta_{ij}^2.
+ \label{lesion-taylor-remainder}
+\end{align}
+In matrix form, with $D_a=\diag(a)$,
+\begin{equation}
+ \widetilde\mu_{\rm lin}
+ =\mathbf1_M a^\top+\Delta D_a
+ =\mathbf1_M a^\top+\widetilde Z\widetilde\beta B^\top D_a.
+ \label{lesion-linear-mean}
+\end{equation}
+The multiplication by $D_a$ weights columns (voxels), not subject rows.
+This is exactly the first-order expansion in manuscript S2.1 before
+the final matrix simplification.
+It can yield negative approximate means if $\Delta_{ij}<-1$.
+It should then not be treated as a valid new Poisson or NB mean
+inside a log-likelihood.
+
+\subsection{Projecting the approximate Poisson score}
+Start with \eqref{lesion-score-matrix} and substitute
+\eqref{lesion-linear-mean}:
+\begin{align}
+ Z^\top(\widetilde Y-\widetilde\mu_{\rm lin})B
+ ={}&Z^\top\widetilde YB
+ -(Z^\top\mathbf1_M)(a^\top B)\\
+ &-(Z^\top \widetilde Z)\widetilde\beta(B^\top D_aB).
+ \label{lesion-taylor-matrix}
+\end{align}
+Every term has dimension $R\times P$.
+For $A\in\R^{R\times R}$ and $K\in\R^{P\times P}$,
+\[
+ \vr(A\widetilde\beta K)=(A\otimes K^\top)\vr(\widetilde\beta).
+\]
+Here $K_a=B^\top D_aB$ is symmetric, so row vectorization gives
+\begin{equation}\label{lesion-taylor-score}
+ U_{\rm lin}
+ =\vr(Z^\top\widetilde YB)
+ -(Z^\top\mathbf1_M)\otimes(B^\top a)
+ -\{(Z^\top \widetilde Z)\otimes K_a\}\beta .
+\end{equation}
+Also $Z^\top \widetilde Z=\widetilde Z^\top \widetilde Z$ because $Q_M^\top Q_M=Q_M$.
+The dimensions are $RP\times1$ for every term.
+The current $\bar\eta,a,K_a$ depend on the current $\beta$;
+this is a residual approximation at an iterate, not an assertion
+that its derivative is just the final Kronecker factor.
+
+\subsection{Differentiate the moving expansion point as well}
+To derive that derivative, put
+$\bar x_j=\bar z\otimes B_j$.
+Then $\bar\eta_j=\bar x_j^\top\beta$ and
+$\Delta_{ij}=(x_{ij}-\bar x_j)^\top\beta$.
+Since $a_j=e^{\bar\eta_j}$, the product rule gives
+\begin{align}
+ \nabla_\beta\{a_j(1+\Delta_{ij})\}
+ &=a_j(1+\Delta_{ij})\bar x_j+
+                         a_j(x_{ij}-\bar x_j)\\
+ &=a_j(x_{ij}+\Delta_{ij}\bar x_j).
+\end{align}
+Therefore the negative Jacobian of the approximate score is
+\begin{equation}
+ A_{\rm lin}=-\frac{\partial U_{\rm lin}}{\partial\beta^\top}
+ =\sum_{i,j}a_jx_{ij}(x_{ij}+\Delta_{ij}\bar x_j)^\top .
+ \label{lesion-taylor-jacobian}
+\end{equation}
+The second term need not be symmetric, so $U_{\rm lin}$ is not
+in general the gradient of any scalar twice-differentiable objective.
+It should not be assigned a ``Hessian'' by retaining only
+$(Z^\top\widetilde Z)\otimes K_a$.
+
+For a direct check, take one voxel, two subject rows $(1,-1)$
+and $(1,1)$, and parameters $(\eta_0,b)$.
+With $a=e^{\eta_0}$ the approximate score is
+\[
+ U_{\rm lin}=
+ \begin{pmatrix}Y_1+Y_2-2a\\-Y_1+Y_2-2ab\end{pmatrix},
+ \qquad
+ A_{\rm lin}=\begin{pmatrix}2a&0\\2ab&2a\end{pmatrix}.
+\]
+For $b\ne0$ the mixed derivatives differ.
+If this approximate score defines the final estimator, its
+estimating-equation sensitivity is \eqref{lesion-taylor-jacobian},
+not automatically the exact likelihood's information.
+A likelihood-based final covariance requires an exact-score
+refinement or justification that the approximation error is
+negligible on the relevant inferential scale.
+As with any working estimating equation, a sandwich still requires
+a well-defined target and appropriate centered score moments.
+
+\subsection{The weighted basis must appear once, not squared}
+Define $\widetilde B=D_aB$, which has dimension $N\times P$.
+Then the last factor in \eqref{lesion-taylor-score} is
+\[
+ K_a=B^\top\widetilde B=B^\top D_aB.
+\]
+In contrast,
+$\widetilde B^\top\widetilde B=B^\top D_a^2B$
+would weight by $a_j^2$, not $a_j$.
+The product $B^\top\widetilde B$ printed in (2.14), Algorithm 1,
+and (S2.42) already has the correct single weight under
+$\widetilde B=D_aB$. It should not be reinterpreted as
+$\widetilde B^\top\widetilde B$.
+An alternative square-root-weighted definition
+$\widehat B=D_a^{1/2}B$ would permit
+$\widehat B^\top\widehat B=B^\top D_aB$.
+Neither weighted basis has dimension $N\times N$ unless $P=N$.
+
+The fixed data projection remains $\vr(Z^\top\widetilde YB)$,
+using the \emph{unweighted} $B$; weighting that data basis would
+change the score. Also the final $RP\times RP$ Kronecker factor
+multiplies the vector $\beta$, not its $R\times P$ reshape
+$\widetilde\beta$. The latter belongs inside the matrix product
+in \eqref{lesion-taylor-matrix}, followed by row-vectorization.
+These distinctions make (2.14)'s data projection and reshaped
+coefficient notation consistent with Algorithm 1 and (S2.42);
+they do not call for replacing the already correct
+$B^\top\widetilde B$ factor.
+
+\subsection{Error in the score and a checkable small example}
+The exact and approximate Poisson scores differ by
+\[
+ U-U_{\rm lin}=-\sum_{i,j}x_{ij}\mathcal R_{ij}.
+\]
+For any compatible vector norm, triangle inequality and
+\eqref{lesion-taylor-remainder} yield
+\[
+ \|U-U_{\rm lin}\|
+ \le\frac12\sum_{i,j}\|x_{ij}\|\,a_j
+                           e^{|\Delta_{ij}|}\Delta_{ij}^2.
+\]
+Large centered log effects invalidate the assumption that the
+first-order residual is close to the exact one, even if the
+mean lesion incidence itself is small.
+
+For a single voxel with intercept log mean $\eta_0$, two centered
+covariate values $(-1,1)$, and coefficient $b$, let $a=e^{\eta_0}$.
+The exact means are $(ae^{-b},ae^b)$; the approximation gives
+$(a(1-b),a(1+b))$.
+The intercept mean projection is $2a\cosh b$ versus $2a$.
+The covariate mean projection is $2a\sinh b$ versus $2ab$.
+Thus the intercept error begins at $ab^2$ and the covariate error
+at $ab^3/3$. In the scalar basis case $B=1$, the correct
+$K_a=a$, whereas squaring the weighted basis incorrectly gives $a^2$.
+This example distinguishes both the intended approximation and the
+unintended weighting change.
+
+\subsection{An NB score approximation must also expand its denominator}
+The manuscript's Taylor residual is a Poisson calculation.
+For NB define the scalar score
+$s(\eta)=(y-e^\eta)/(1+\alpha e^\eta)$.
+At $\eta=\bar\eta_j$,
+\[
+ s(\bar\eta_j)=\frac{y-a_j}{1+\alpha a_j},\qquad
+ s'(\bar\eta_j)=-\frac{a_j(1+\alpha y)}{(1+\alpha a_j)^2}.
+\]
+A first-order approximation to the actual NB score is therefore
+\begin{equation}
+ s_{ij}\approx
+ \frac{Y_{ij}-a_j}{1+\alpha a_j}
+ -\frac{a_j(1+\alpha Y_{ij})}{(1+\alpha a_j)^2}\Delta_{ij}.
+ \label{lesion-nb-taylor}
+\end{equation}
+For a projected matrix expression set
+$k_j=(1+\alpha a_j)^{-1}$ and
+$c_j=a_j/(1+\alpha a_j)^2$. Then
+\begin{align}
+ S_{\rm lin}^{\rm NB}
+ &=(\widetilde Y-\mathbf1_Ma^\top)\diag(k)
+       -\Delta\diag(c)-\alpha(\widetilde Y\mathbin{\odot}\Delta)\diag(c),\\
+ U_{\rm lin}^{\rm NB}&=\vr(Z^\top S_{\rm lin}^{\rm NB}B).
+\end{align}
+The final data-dependent term is absent for Poisson.
+There is no automatic claim that it reduces to the same cached
+products or computational cost as \eqref{lesion-taylor-score}.
+Its validity is a local Taylor approximation with fixed $\alpha$,
+not the exact NB update in (2.12).
+As $\alpha\downarrow0$ it reduces to the Poisson expansion.
+
+\section{Covariance for the spatially varying model}
+\label{lesion-covariance}
+
+\subsection{From a likelihood Taylor expansion to an inverse information}
+For an unpenalized fit $\widehat\beta$, expand the score near its
+population target $\beta_0$:
+\[
+ 0=U(\widehat\beta)
+ \approx U(\beta_0)-H(\beta_0)(\widehat\beta-\beta_0).
+\]
+Thus $\widehat\beta-\beta_0\approx H^{-1}U(\beta_0)$.
+Under a correctly specified regular likelihood,
+$\Var(U)=I$ and the large-sample sensitivity is $I$,
+giving $\Cov(\widehat\beta)\approx I^{-1}$.
+An observed-information alternative uses $H(\widehat\beta)^{-1}$.
+These coincide algebraically for Poisson but not generally for NB.
+Neither is the exact finite-sample covariance of a nonlinear estimator.
+
+A fixed initialization preconditioner is not substituted for
+$I(\widehat\beta)$ merely because it was used to optimize the fit.
+Inference must use the curvature or sensitivity of the final
+estimating equation, or explicitly quantify an approximation to it.
+
+\subsection{Selected covariance by a solve}
+For $C_\beta\in\R^{k\times RP}$, solve
+\[
+ IV=C_\beta^\top.
+\]
+Then $V=I^{-1}C_\beta^\top$ and
+$C_\beta V=C_\beta I^{-1}C_\beta^\top$ is the desired
+$k\times k$ covariance.
+This needs $k$ right-hand sides rather than all $RP$ columns
+of an inverse. A coordinate variance uses a coordinate row;
+a voxelwise contrast uses the row derived in
+Section~\ref{lesion-inference}.
+Batch voxel contrasts to avoid storing a full $N\times N$
+spatial covariance when only its diagonal is required.
+
+\subsection{Design-supported block structure}
+By \eqref{lesion-hessian-entry}, a spatial cross block is zero
+if $Z_{ir}Z_{ir'}=0$ for every subject.
+Connect columns of $Z$ when they co-occur in a row.
+Different connected components give independent information blocks
+after a coefficient permutation:
+$H=\operatorname{blkdiag}(H_1,\ldots,H_K)$.
+Direct multiplication proves
+$H^{-1}=\operatorname{blkdiag}(H_1^{-1},\ldots,H_K^{-1})$
+when each block is invertible.
+
+An intercept column and continuously varying covariates usually
+connect the SV maps, so group-style independent spatial blocks
+are not generally available here.
+No direct edge is weaker than no connecting path:
+for $\bigl(\begin{smallmatrix}a&b&0\\b&c&e\\0&e&f\end{smallmatrix}\bigr)$
+the $(1,3)$ inverse entry is $be/\det H$, generally nonzero.
+Accidental zero entries at one fit should not define reusable
+structural blocks.
+
+\subsection{Joint dispersion adjustment}
+If $\alpha$ is jointly estimated, write its observed information as
+\[
+ \mathcal I_{\rm obs}
+ =\begin{pmatrix}H_{\beta\beta}&h\\h^\top&a_\alpha\end{pmatrix},
+ \quad h=H_{\beta\alpha},\quad a_\alpha=H_{\alpha\alpha}.
+\]
+For a system with right-hand side $(b,0)$, the nuisance equation gives
+$x_\alpha=-a_\alpha^{-1}h^\top x_\beta$.
+Substitution into the regression equation gives
+\[
+ (H_{\beta\beta}-h a_\alpha^{-1}h^\top)x_\beta=b.
+\]
+Hence the regression block of the joint inverse is
+\begin{equation}
+ (\mathcal I_{\rm obs}^{-1})_{\beta\beta}
+ =(H_{\beta\beta}-h a_\alpha^{-1}h^\top)^{-1}.
+ \label{lesion-dispersion-schur}
+\end{equation}
+This requires the stated inverses; positive-definite joint curvature
+gives a PSD information reduction and a nonnegative covariance
+adjustment relative to treating dispersion as known.
+
+For the correctly specified independent NB count likelihood,
+$\E f_{\eta\alpha}=0$ because \eqref{lesion-nuisance-alpha}
+is proportional to $Y-\mu$.
+Regression and dispersion are therefore orthogonal in its
+expected information, but the observed cross block need not vanish.
+Alternating regression and dispersion updates does not itself imply
+orthogonality or supply the joint adjustment.
+For robust inference, stack both score equations and form their
+joint sandwich; adjusting only the regression bread does not account
+for nuisance-score variability.
+
+\section{Subject-clustered sandwich: matching score, bread, and normalization}
+\label{lesion-sandwich}
+
+\subsection{Derivation with summed rather than averaged quantities}
+Let $U_i$ be the chosen family's subject score and
+$U=\sum_iU_i$. Define
+\[
+ A=-\sum_i\frac{\partial U_i}{\partial\beta^\top},\quad
+ J=\sum_iU_iU_i^\top.
+\]
+At a suitable target, the score linearization gives
+$\widehat\beta-\beta_0\approx A^{-1}\sum_iU_i$.
+For independent subjects and valid moment assumptions, the empirical
+covariance is
+\begin{equation}\label{lesion-sandwich-formula}
+ V_{\rm robust}=A^{-1}JA^{-\top}.
+\end{equation}
+No further $1/M$ multiplies this formula: $A$ and $J$ are
+already sums. If $\bar A=A/M$ and $\bar J=J/M$,
+$(1/M)\bar A^{-1}\bar J\bar A^{-\top}=A^{-1}JA^{-\top}$.
+This checks the normalization explicitly.
+
+For the likelihood score, $A=H$.
+The NB expected-sensitivity weights in
+\eqref{lesion-nb-fisher} are an asymptotically justified alternative
+under the correct conditional mean and appropriate regularity.
+They are not a license to change the score to the Poisson residual.
+
+\subsection{The family-specific subject score}
+The correct scores are
+\[
+ U_i^{\rm P}=X_i^\top(Y_i-\mu_i),\qquad
+ U_i^{\rm NB}
+ =X_i^\top\diag\{(1+\alpha\mu_i)^{-1}\}(Y_i-\mu_i).
+\]
+The manuscript's (2.18) uses the Poisson form for both families.
+To interpret it as an NB likelihood sandwich, replace the score
+by the NB expression above and use its matching sensitivity.
+A common log link does not make the two likelihood scores identical.
+
+Write $U_i=\sum_j u_{ij}$ and expand its outer product:
+\[
+ U_iU_i^\top
+ =\sum_j u_{ij}u_{ij}^\top+
+                  \sum_{j\ne k}u_{ij}u_{ik}^\top.
+\]
+Subject clustering retains the cross-voxel terms.
+A cellwise sum of outer products drops them and is not robust
+to arbitrary residual dependence within a lesion image.
+If subjects themselves are dependent, the independent unit must
+be enlarged appropriately; more voxels do not supply more
+independent subjects.
+
+Consistency also needs the relevant mean and law-of-large-numbers
+conditions. Under a misspecified fixed design, uncentered score
+outer products with nonzero individual score means cannot
+automatically be equated with sampling variances.
+A sandwich estimates variability around the estimator's target;
+it does not remove mean misspecification or approximation bias.
+
+\subsection{Contrast sandwich as a Gram matrix of projected scores}
+Stack subject scores as columns,
+$\mathcal U=[U_1,\ldots,U_M]\in\R^{RP\times M}$,
+so $J=\mathcal U\mathcal U^\top$.
+This is the column orientation of the matrix called $U$ in
+manuscript (S2.48); the calligraphic symbol distinguishes it from
+the total score $U=\sum_iU_i$.
+For symmetric bread $A$, solve $AV=C_\beta^\top$ and let
+$G=\mathcal U^\top V$.
+Then
+\[
+ G^\top G
+ =V^\top J V
+ =C_\beta A^{-1}JA^{-1}C_\beta^\top.
+\]
+This obtains the contrast covariance without constructing a dense meat
+or full inverse. Equivalently accumulate $g_i g_i^\top$ with
+$g_i=C_\beta A^{-1}U_i$.
+For a nonsymmetric estimating-equation bread solve
+$A^\top V=C_\beta^\top$ instead.
+
+The Gram representation is PSD and has rank at most $\min(M,k,d)$.
+At an exactly solved unpenalized score equation,
+$\sum_iU_i=0$, giving the stronger bound $\min(M-1,k,d)$.
+A scalar degrees-of-freedom correction cannot increase that rank
+or compensate for an inadequate number of independent subjects.
+
+\subsection{Expand the manuscript's QR sandwich calculation}
+For Poisson, define the paper's weighted subject design
+$X_{w,i}=W_i^{1/2}X_i$, with $W_i=\diag(\mu_i)$.
+The stacked weighted design $X_w$ satisfies
+\[
+ X_w^\top X_w=\sum_iX_{w,i}^\top X_{w,i}
+            =\sum_iX_i^\top W_iX_i=A.
+\]
+This is (S2.44)--(S2.47). The supplement calls the bread $B$
+and the meat $M$; we retain $A$ and $J$ to avoid confusing
+them with the spatial basis and number of subjects.
+
+For full-column-rank $X_w$, take a thin QR factorization
+\[
+ X_w=\mathcal Q\mathcal R,\qquad
+ \mathcal Q^\top\mathcal Q=I_{RP},\qquad
+ A=\mathcal R^\top\mathcal R .
+\]
+Here $\mathcal R$ is \emph{upper} triangular in the standard QR
+convention, not lower triangular as described after (S2.48).
+To compute $\mathcal S_U=A^{-1}\mathcal U$, solve
+\[
+ \mathcal R^\top T_U=\mathcal U,\qquad
+ \mathcal R\mathcal S_U=T_U.
+\]
+Substitution gives
+$\mathcal R^\top\mathcal R\mathcal S_U=\mathcal U$,
+which verifies the solve order. The supplement names these
+intermediates $Z$ and $S$; $T_U,\mathcal S_U$ keep them separate
+from the study design and contrast count here.
+Now multiply:
+\begin{align}
+ A^{-1}JA^{-1}
+ &=A^{-1}\mathcal U\mathcal U^\top A^{-1}\\
+ &=(A^{-1}\mathcal U)(A^{-1}\mathcal U)^\top
+   =\mathcal S_U\mathcal S_U^\top.
+ \label{lesion-qr-sandwich}
+\end{align}
+This derives (S2.49)--(S2.50) without constructing a dense meat.
+For only $k$ contrasts, the smaller solves in the previous
+subsection avoid storing all $RP\times M$ solved score columns.
+
+For NB expected-sensitivity bread the same algebra uses
+$W_i=\diag\{\mu_i/(1+\alpha\mu_i)\}$ and the NB subject scores.
+For observed NB bread, use the observed weights instead.
+Changing the bread's weights does not eliminate the NB residual
+denominator in $\mathcal U$.
+
+The full $MN\times RP$ stack need not be stored.
+If $\mathcal R_{\rm old}$ represents already processed weighted
+rows, QR-factor the stack of $\mathcal R_{\rm old}$ and the next
+block $X_{w,\rm next}$. The resulting factor obeys
+\[
+ \mathcal R_{\rm new}^\top\mathcal R_{\rm new}
+ =\mathcal R_{\rm old}^\top\mathcal R_{\rm old}
+                   +X_{w,\rm next}^\top X_{w,\rm next}.
+\]
+This proves the blockwise accumulation of the same bread factor.
+With a thin SVD $X_w=Q_wD_wV_w^\top$, the equivalent solve is
+$A^{-1}\mathcal U=V_wD_w^{-2}V_w^\top\mathcal U$ when every
+singular value is positive.
+Since $\kappa_2(A)=\kappa_2(X_w)^2$, weighted-design QR/SVD can
+avoid the extra rounding error of explicitly forming a Gram
+matrix, but cannot create information in a singular design.
+
+\section{Voxelwise inference under the manuscript's spatial-effect setup}
+\label{lesion-inference}
+
+\subsection{Linear map contrasts and dimension checks}
+Let $C\in\R^{S\times R}$ specify the tested spatial covariate effects.
+The map vector at voxel $j$ is
+the paper's $\varphi_j=(I_R\otimes B_j^\top)\beta$.
+Across voxels, retain its contrast-map notation
+$\bar\eta_C=(C\otimes B)\beta$ and
+$\bar\mu_C=\exp(\bar\eta_C)$.
+The bar with subscript $C$ labels these contrasts; it does not
+mean the subject averaging used to define $\bar\eta$ in the
+Taylor expansion.
+Multiplying by $C$ gives
+\[
+ T_j=C\otimes B_j^\top\in\R^{S\times RP},\quad
+ \widehat\delta_j=T_j\widehat\beta-\delta_{0j},\quad
+ V_j=T_j V_\beta T_j^\top.
+\]
+This supplies the dimensions for manuscript (2.15)--(2.16).
+For $S$ independent estimable constraints and nonsingular consistent
+$V_j$, $Q_j=\widehat\delta_j^\top V_j^{-1}\widehat\delta_j$
+has the usual asymptotic $\chi_S^2$ null law.
+To derive the degrees of freedom, factor $V_j=L_jL_j^\top$.
+Under the null, $L_j^{-1}\widehat\delta_j$ is asymptotically a
+vector of $S$ independent standard normals, and $Q_j$ is its
+squared norm.
+For one contrast, preserve the paper's signed statistic:
+\[
+ W_j=\frac{(C\otimes B_j^\top)\widehat\beta-\delta_{0j}}
+ {\sqrt{(C\otimes B_j^\top)V_\beta(C\otimes B_j^\top)^\top}},
+ \qquad Q_j=W_j^2 .
+\]
+The manuscript's (2.15)--(2.16) use $\delta_{0j}=0$.
+The signed $W_j$ is asymptotically $N(0,1)$, whereas its square
+is asymptotically $\chi_1^2$; these names are not interchanged here.
+Reduce redundant constraints explicitly rather than using a
+pseudoinverse to hide an unidentified test.
+Contrast rows need not sum to one: differences have row sum zero.
+
+\subsection{The vectorized Wald map uses covariance diagonals}
+For $S=1$ and a zero null, set $T=C\otimes B\in\R^{N\times RP}$.
+Then $\widehat{\bar\eta}_C=T\widehat\beta$ and its covariance
+estimate is $TV_\beta T^\top$, an $N\times N$ matrix.
+Only its diagonal contains the marginal variances required for
+the paper's vector of signed statistics:
+\[
+ \mathbf W=
+ \widehat{\bar\eta}_C\ \mathbin{/}\
+ \sqrt{\diag(TV_\beta T^\top)}.
+\]
+Here $\diag$ extracts the diagonal of a square matrix, and
+division and square root are elementwise. The full covariance
+matrix under a square root is not an $N$-vector of standard
+errors; this makes that step in (2.16) dimensionally explicit.
+For a two-sided normal reference, $P_j=2\{1-\Phi(|W_j|)\}$,
+where $\Phi$ is the standard normal distribution function.
+The diagonal can be computed by the selected solves above
+without forming the full map covariance.
+
+\subsection{Comparing independently fitted groups}
+The manuscript's group comparison can fit the SV model independently
+in disjoint groups with coefficient vectors $\beta_g,\beta_h$.
+If their data and fitting decisions are genuinely independent,
+their joint covariance is $\operatorname{blkdiag}(V_g,V_h)$.
+For a fixed covariate-effect contrast $c\in\R^R$,
+\[
+ T_j=[\,c^\top\otimes B_j^\top\quad
+                  -c^\top\otimes B_j^\top\,],\qquad
+ V_{\delta j}=(c^\top\otimes B_j^\top)(V_g+V_h)(c\otimes B_j).
+\]
+Equivalently, stack $(\beta_g^\top,\beta_h^\top)^\top$ and use
+$C_{\rm pair}=(c^\top,-c^\top)\in\R^{1\times2R}$.
+This is a row contrast; a terminal transpose would instead make
+it a $2R\times1$ column.
+Unequal group sizes enter $V_g,V_h$; equality of a scientific
+effect under a null is not a claim that finite-sample estimates or
+their variances are independent of sample size.
+If groups share subjects, fitted nuisance coefficients, or a coupled
+selection procedure, zero cross-covariance needs reconsideration.
+This separately fitted SV comparison is not the shared-global
+multi-group CBMR parameterization of the other paper.
+
+\subsection{Polynomial covariates and nonlinear intensity summaries}
+If an age covariate $t$ enters through $t,t^2,t^3$, label those
+three components of the voxel coefficient vector as
+$\varphi_{j1},\varphi_{j2},\varphi_{j3}$.
+Their log effect is
+$\varphi_{j1}t+\varphi_{j2}t^2+\varphi_{j3}t^3$ and its local derivative is
+\[
+ \frac{\partial\eta_j(t)}{\partial t}
+ =\varphi_{j1}+2t\varphi_{j2}+3t^2\varphi_{j3}.
+\]
+This is a linear coefficient contrast at any specified $t$,
+with covariate row $(1,2t,3t^2)$ in the polynomial coordinates.
+A finite change from $t_0$ to $t_1$ instead uses
+$(t_1-t_0,t_1^2-t_0^2,t_1^3-t_0^3)$.
+Its intensity ratio is the exponential of that log contrast;
+it is not generally the exponential of a single linear-age coefficient.
+
+For a specified subject design row $Z_*^\top$, put
+$x_{*j}=Z_*\otimes B_j$.
+Then $\mu_{*j}=e^{x_{*j}^\top\beta}$ has
+Jacobian $\partial\mu_{*j}/\partial\beta^\top=\mu_{*j}x_{*j}^\top$.
+Therefore
+$\Cov(\widehat\mu_{*j},\widehat\mu_{*k})
+\approx\mu_{*j}\mu_{*k}x_{*j}^\top V_\beta x_{*k}$.
+For a scalar log contrast $\delta$, the delta-method variance
+of $e^{\widehat\delta}$ is approximately
+$e^{2\delta}\Var(\widehat\delta)$.
+These Jacobians are exact; the covariance transformations are
+first-order approximations.
+An intensity ratio is a risk ratio only when the fitted intensities
+can validly be interpreted as the conditional binary means.
+For the explicitly conditioned logistic model,
+$e^\delta$ is instead an odds ratio.
+
+\subsection{Multiplicity and bootstrap remain separate statistical steps}
+Pointwise Wald $p$-values do not automatically control error over
+many voxels. Benjamini--Hochberg targets FDR under its required
+dependence conditions, not general FWER control.
+Neither faster Hessians nor a different spatial basis proves those
+conditions or calibrates a finite-sample tail.
+
+A nonparametric bootstrap should resample independent subjects with
+their whole binary images and covariates, or the appropriate larger
+independent clusters. A fixed-design parametric bootstrap keeps
+covariates fixed and simulates the specified response model.
+For a null test, fit and simulate the null rather than the unrestricted
+alternative, and repeat the estimation, dispersion fitting, and
+data-driven tuning steps that define the reported estimator.
+If Poisson/NB counts are simulated, the experiment assesses that
+count-model bootstrap; it does not silently become a Bernoulli
+lesion bootstrap. A spatial binary simulator must preserve the
+intended within-subject dependence.
+Failed refits must be reported and diagnosed, not silently removed
+from the reference distribution.
+
+\section{Supplement S2.3: a complete toy slope-map variance derivation}
+\label{lesion-toy-variance}
+
+\subsection{Translate the supplement's local symbols and coefficient order}
+Only in this section, follow S2.3 with \emph{scalar} subject values
+$Z_i$ and spatial values $B_j$, and two-component vectors
+\[
+ x_i=(1,Z_i)^\top,\qquad b_j=(1,B_j)^\top,\qquad
+ \beta_{\rm toy}=(\alpha,\gamma,\delta,\theta)^\top.
+\]
+These scalar $Z_i,B_j$ are not the main text's design columns.
+Likewise, the supplement's $\alpha$ is now a log-intercept, not
+NB dispersion; $\gamma,\delta,\theta$ are scalar toy coefficients,
+not the initialization vector or log-dispersion coordinate.
+We retain these local names so each step can be compared with S2.3.
+Let $\mathsf X$ and $\mathsf B$ have rows $x_i^\top$ and $b_j^\top$;
+these are the local matrices called $X$ and $B$ in that supplement.
+
+Expand the supplement's basis-first Kronecker product:
+\[
+ b_j\otimes x_i=(1,Z_i,B_j,Z_iB_j)^\top,\qquad
+ \log\mu_{ij}=\alpha+\gamma Z_i+\delta B_j+\theta Z_iB_j.
+\]
+The main text instead orders $x_i\otimes b_j=(1,B_j,Z_i,Z_iB_j)^\top$.
+Thus its map-major coefficient vector is
+$(\alpha,\delta,\gamma,\theta)^\top$, obtained by interchanging
+coordinates two and three.
+If $\Pi$ is that permutation matrix, then
+$\beta_{\rm main}=\Pi\beta_{\rm toy}$ and
+$I_{\rm main}=\Pi I_{\rm toy}\Pi^\top$.
+Contrasts must be permuted with the coefficients; the variance
+of the same scientific slope is then unchanged.
+
+\subsection{Separate the subject and spatial Gram matrices}
+Assume $\sum_i Z_i=0$, as in the supplement, and define
+\[
+ S_Z=\sum_i Z_i^2,\qquad S_B=\sum_j B_j^2.
+\]
+Direct multiplication, without mixing the two sets of indices, gives
+\[
+ \mathsf X^\top\mathsf X=
+ \begin{pmatrix}M&0\\0&S_Z\end{pmatrix},\qquad
+ \mathsf B^\top\mathsf B=
+ \begin{pmatrix}N&\sum_jB_j\\\sum_jB_j&S_B\end{pmatrix}.
+\]
+Subject centering eliminates $\sum_iZ_i$ from the first matrix.
+It does not replace that zero by a spatial sum $\sum_jB_j$,
+and does not replace the subject count $M$ by the voxel count $N$.
+
+The exact Poisson information in the supplement's order is
+\[
+ I_{\rm toy}=\sum_{i,j}\mu_{ij}
+                     (b_jb_j^\top)\otimes(x_ix_i^\top).
+\]
+If the subject-dependent log effects $(\gamma+\theta B_j)Z_i$
+are small, approximate
+$\mu_{ij}\approx\mu_j=\exp(\alpha+\delta B_j)$.
+This equality is exact at $\gamma=\theta=0$.
+Pulling the separate sums out of the Kronecker product gives
+\[
+ I_{\rm toy}\approx
+ \left(\sum_j\mu_j b_jb_j^\top\right)\otimes
+ \left(\sum_i x_ix_i^\top\right).
+\]
+Write the supplement's scalar moments $A,B,C$ as
+\[
+ A_\mu=\sum_j\mu_j,\quad
+ B_\mu=\sum_jB_j\mu_j,\quad
+ C_\mu=\sum_jB_j^2\mu_j,
+\]
+to avoid collisions with the spatial design and contrast matrix.
+With $K_\mu=\bigl(\begin{smallmatrix}A_\mu&B_\mu\\
+B_\mu&C_\mu\end{smallmatrix}\bigr)$ and
+$D_Z=\diag(M,S_Z)$, the four-by-four information is
+\begin{equation}
+ I_{\rm toy}\approx K_\mu\otimes D_Z
+ =\begin{pmatrix}
+ MA_\mu&0&MB_\mu&0\\
+ 0&S_ZA_\mu&0&S_ZB_\mu\\
+ MB_\mu&0&MC_\mu&0\\
+ 0&S_ZB_\mu&0&S_ZC_\mu
+ \end{pmatrix}.
+ \label{lesion-toy-information}
+\end{equation}
+
+\subsection{Invert the two factors and project to the slope}
+The slope at voxel $j$ is the supplement's
+$m_j=\gamma+B_j\theta=(b_j\otimes c)^\top\beta_{\rm toy}$,
+where $c=(0,1)^\top$.
+Assume $S_Z>0$ and
+$\Delta_\mu=A_\mu C_\mu-B_\mu^2>0$.
+Then
+\[
+ K_\mu^{-1}=\frac1{\Delta_\mu}
+       \begin{pmatrix}C_\mu&-B_\mu\\-B_\mu&A_\mu\end{pmatrix},
+ \qquad D_Z^{-1}=\diag(1/M,1/S_Z).
+\]
+The mixed-product identity gives
+\begin{align}
+ \Var(\widehat m_j)
+ &\approx(b_j\otimes c)^\top
+             (K_\mu^{-1}\otimes D_Z^{-1})(b_j\otimes c)\\
+ &=(b_j^\top K_\mu^{-1}b_j)(c^\top D_Z^{-1}c)\\
+ &=\frac{C_\mu-2B_\mu B_j+A_\mu B_j^2}
+                {S_Z(A_\mu C_\mu-B_\mu^2)}.
+ \label{lesion-toy-variance-formula}
+\end{align}
+The approximation combines the small-slope information
+factorization with inverse-information asymptotics for the estimator.
+The matrix inversion and contrast projection are exact algebra.
+
+For a more interpretable form, define
+\[
+ \bar B_\mu=B_\mu/A_\mu,\qquad
+ S_{BB,\mu}=\sum_j\mu_j(B_j-\bar B_\mu)^2
+           =C_\mu-B_\mu^2/A_\mu.
+\]
+Expanding and completing the square in the numerator yields
+\[
+ \Var(\widehat m_j)\approx\frac1{S_Z}
+       \left\{\frac1{A_\mu}
+                 +\frac{(B_j-\bar B_\mu)^2}{S_{BB,\mu}}\right\}.
+\]
+The determinant condition is $A_\mu S_{BB,\mu}>0$:
+the spatial feature must vary on positive-weight voxels.
+Neither a constant spatial feature nor a constant subject covariate
+can be repaired by an inverse formula.
+
+\subsection{Constant means, pooling, and a correction to the printed formula}
+When $\mu_j\approx\bar\mu$, let
+$\bar B=N^{-1}\sum_jB_j$ and
+$S_{BB}=\sum_j(B_j-\bar B)^2$.
+Then $A_\mu=N\bar\mu$, $\bar B_\mu=\bar B$, and
+$S_{BB,\mu}=\bar\mu S_{BB}$, giving
+\begin{equation}
+ \Var(\widehat m_j)\approx
+ \frac1{\bar\mu S_Z}
+ \left\{\frac1N+\frac{(B_j-\bar B)^2}{S_{BB}}\right\}.
+ \label{lesion-toy-constant}
+\end{equation}
+The extra factor involving
+$NS_Z-(\sum_jB_j)^2$ in the supplied S2.3 derivation does not
+follow from its centered subject design. It mixes a voxel moment
+into the subject Gram matrix. In particular the final denominator
+must not replace $S_Z$ by $S_Z-N\bar B^2$.
+Equations \eqref{lesion-toy-information}--\eqref{lesion-toy-constant}
+show where the two dimensions remain separate.
+
+For a hand check, take $M=3$, $Z_i=(-1,0,1)$, $N=4$,
+$B_j=(0,1,2,3)$, and $\bar\mu=0.1$.
+Then $S_Z=2$, $\bar B=1.5$, and $S_{BB}=5$.
+The corrected inverse-information slope variances are
+$(3.5,1.5,1.5,3.5)$; the erroneous factor
+$S_Z-N\bar B^2=-7$ would give negative values.
+These are algebraic audit values, not a claim of accurate
+small-sample inference with only three subjects.
+
+Under the same independent Poisson assumptions, separate
+voxelwise intercept/slope fits have inverse-information slope
+variance $1/(\bar\mu S_Z)$.
+The spatial result multiplies it by
+$h_j=1/N+(B_j-\bar B)^2/S_{BB}$.
+These are the diagonal leverages of the two-column spatial
+design: $0\le h_j\le1$ and $\sum_jh_j=2$.
+This quantifies pooling when the spatial slope restriction is
+appropriate; it is not a guarantee under a misspecified slope
+map or residual spatial dependence.
+For binary or correlated lesion images, the applicable
+score-variability calculation remains the subject sandwich,
+not an automatic identification of Poisson information with variance.
+
+\section{The mass-univariate logistic and Firth comparator}
+\label{lesion-logistic}
+
+\subsection{Logistic score and Hessian at one voxel}
+For the comparator in manuscript S1.1, fit each voxel separately.
+Its symbols $(X,x_i,\beta_j,\eta_{ij})$ correspond here to
+$(Z,Z_i,\varphi_j,\zeta_{ij})$, respectively.
+This preserves the main text's design and voxel-coefficient names
+while reserving $X,\beta$ for the full spatial model.
+The comparator's $\varphi_j$ is fitted with a logistic link here;
+it is not asserted to equal the Poisson MUM estimate in (2.5).
+Use coefficient $\varphi_j\in\R^R$, predictor
+$\zeta_{ij}=Z_i^\top\varphi_j$, and
+$p_{ij}=e^{\zeta_{ij}}/(1+e^{\zeta_{ij}})$.
+The Bernoulli log-likelihood is
+\begin{align}
+ \ell_j
+ &=\sum_i\{Y_{ij}\log p_{ij}+(1-Y_{ij})\log(1-p_{ij})\}\\
+ &=\sum_i\{Y_{ij}\zeta_{ij}-\log(1+e^{\zeta_{ij}})\}.
+\end{align}
+Since $\partial_\zeta p=p(1-p)$,
+\[
+ U_j=Z^\top(Y_{\cdot j}-p_{\cdot j}),\quad
+ H_j=I_j=Z^\top\diag\{p_{\cdot j}(1-p_{\cdot j})\}Z.
+\]
+This $R\times R$ matrix is for one voxel's comparator, not the
+$RP\times RP$ spatial model. Restricting the logistic coefficient
+field to a basis would instead use the full spatial design and
+weights $p_{ij}(1-p_{ij})$.
+Neither formulation has the Poisson weight $\mu_{ij}$.
+
+\subsection{Firth's determinant term is not a fixed quadratic penalty}
+The manuscript's Firth comparator maximizes
+$\ell_{F,j}=\ell_j+\tfrac12\log\det I_j$.
+Assume $I_j$ is nonsingular. The identity
+$d\log\det I=\tr(I^{-1}dI)$ gives
+\begin{equation}
+ (U_{F,j})_a=(U_j)_a+\tfrac12\tr(I_j^{-1}I_{j,a}),
+ \qquad I_{j,a}=\partial_{\varphi_{j,a}}I_j .
+\end{equation}
+Write $w_i=p_i(1-p_i)$, suppressing the fixed voxel $j$.
+Then
+\begin{align}
+ \partial_{\zeta_i}w_i&=w_i(1-2p_i),\\
+ \partial^2_{\zeta_i}w_i
+ &=w_i(1-2p_i)^2-2w_i^2,\\
+ I_{j,a}
+ &=\sum_i w_i(1-2p_i)Z_{ia}Z_iZ_i^\top,\\
+ I_{j,ab}
+ &=\sum_i\{w_i(1-2p_i)^2-2w_i^2\}
+                         Z_{ia}Z_{ib}Z_iZ_i^\top .
+\end{align}
+The first derivative also has a directly interpretable
+leverage form. Define $h_i=w_i Z_i^\top I_j^{-1}Z_i$.
+Using $\tr(I_j^{-1}Z_iZ_i^\top)=Z_i^\top I_j^{-1}Z_i$,
+\begin{align}
+ \tfrac12\tr(I_j^{-1}I_{j,a})
+ &=\tfrac12\sum_i w_i(1-2p_i)Z_{ia}
+                               Z_i^\top I_j^{-1}Z_i\\
+ &=\sum_i h_i(1/2-p_i)Z_{ia},\\
+ U_{F,j}&=Z^\top\{Y_{\cdot j}-p_{\cdot j}
+                         +h\mathbin{\odot}(1/2-p_{\cdot j})\}.
+\end{align}
+Here $Y_{\cdot j}=(Y_{1j},\ldots,Y_{Mj})^\top$ is the vector
+at voxel $j$, not the initialization's summed margin $(Y_B)_j$.
+For a full-rank design,
+$\sum_i h_i=\tr(I_j^{-1}I_j)=R$.
+This expands the determinant adjustment, rather than treating it
+as a constant ridge term.
+Differentiating $I^{-1}I=I_R$ gives
+$\partial_b I^{-1}=-I^{-1}I_bI^{-1}$.
+Therefore the full observed information of the penalized comparator is
+\begin{equation}
+ (H_{F,j})_{ab}=(H_j)_{ab}
+ -\tfrac12\tr\{I_j^{-1}I_{j,ab}
+                   -I_j^{-1}I_{j,b}I_j^{-1}I_{j,a}\}.
+\end{equation}
+The determinant term depends on the coefficients and has its own
+curvature. It is not the fixed roughness penalty from the
+published coordinate-based CBMR model.
+The sampling covariance of a bias-reduced estimator also requires
+its inferential assumptions; an inverse penalized Hessian is
+not a universal finite-sample standard-error formula.
+
+\section{Numerical conditioning and explicitly optional regularization}
+
+\subsection{Symmetric eigenvalues replace an unnecessary general SVD}
+For symmetric nonsingular $H=Q\Lambda Q^\top$,
+$H^\top H=Q\Lambda^2Q^\top$, so its singular values are
+$|\lambda_a|$. Thus
+\[
+ \kappa_2(H)=\frac{\max_a|\lambda_a|}{\min_a|\lambda_a|}.
+\]
+For SPD information the absolute values are unnecessary.
+An indefinite matrix may have a finite condition number but not a
+valid inverse-covariance interpretation.
+For disconnected blocks take the largest absolute eigenvalue over
+all blocks divided by the smallest over all blocks, not the
+largest within-block condition number.
+For example, blocks $I$ and $10^6I$ each have condition number one,
+while their combined matrix has condition number $10^6$.
+
+For exact $P_0=K_Z\otimes K_B$,
+$\kappa_2(P_0)=\kappa_2(K_Z)\kappa_2(K_B)$.
+This diagnostic describes that preconditioner; it need not describe
+the final nonseparable information.
+Solving with a factorization is preferable to explicitly forming
+an inverse when only directions or contrasts are requested.
+Symmetrizing roundoff does not repair genuine singularity.
+
+\subsection{A fixed quadratic penalty would be an additional model choice}
+The manuscript's core spatial model reduces dimension using a fixed
+basis; it does not thereby acquire the other paper's roughness penalty.
+If one deliberately adds $\mathcal P(\beta)=\tfrac12\beta^\top K\beta$
+with fixed symmetric $K\succeq0$, then
+\[
+ \nabla(-\ell+\mathcal P)=-U+K\beta,\qquad
+ H_{\rm pen}=H+K.
+\]
+Linearizing $U(\widehat\beta)-K\widehat\beta=0$ gives
+\[
+ (H+K)(\widehat\beta-\beta_0)\approx U(\beta_0)-K\beta_0.
+\]
+Its local sampling covariance is
+$(H+K)^{-1}J(H+K)^{-\top}$, not automatically $(H+K)^{-1}$,
+and its local bias includes $-(I+K)^{-1}K\beta_0$.
+Under a correctly specified count likelihood,
+\[
+ (I+K)^{-1}-(I+K)^{-1}I(I+K)^{-1}
+ =(I+K)^{-1}K(I+K)^{-1}.
+\]
+Inverse penalized curvature is instead the usual local Gaussian
+posterior curvature when the penalty is interpreted as a prior.
+Neither expression includes data-selected penalty uncertainty.
+
+Adding a numerical ridge only when computing a covariance changes
+the inverse without changing the estimator's fitted equation.
+It cannot be described as new data identification.
+For PSD $H,K$, $H+K\succ0$ exactly when their null spaces share
+no nonzero direction; a roughness penalty may leave a constant
+confounding direction untouched.
+
+\subsection{Computational accounting for the manuscript's alternatives}
+The following orders use dense arithmetic and a fixed basis.
+They separate fitting calculations from the covariance output;
+they are not measured timings.
+\begin{center}\small
+\begin{tabularx}{\textwidth}{TT}
+\toprule
+Calculation & Leading operation count and storage implication\\
+\midrule
+Exact batched Poisson mean and score &
+$O(MNP+MRP)$ work with subject batching; no explicit
+$MN\times RP$ design is needed\\
+Exact independent-cell information &
+$O(MNP^2+MR^2P^2)$ for studywise basis products and block assembly;
+dense output still has $(RP)^2$ entries\\
+Fixed separable Poisson preconditioner &
+Factor work $O(P^3+R^3)$ after forming its two weighted Gram matrices;
+factor storage $O(P^2+R^2)$\\
+Poisson Taylor score after fixed projections &
+$O(NP^2+R^2P+RP^2)$ per iterate for $K_a$, matrix products and
+the new expansion point; no full current $M\times N$ mean array\\
+Dense final information factorization &
+$O((RP)^3)$ work and $O((RP)^2)$ storage unless additional exact
+structure is available\\
+$k$ contrast covariance solves &
+$O(k(RP)^2)$ after a dense factorization, with $RP\times k$
+solve output instead of a full inverse\\
+Exact Hessian--vector product &
+$O(MRP+MNP)$ per product with current weights; no dense information
+matrix, but iterative solves need convergence control\\
+\bottomrule
+\end{tabularx}
+\end{center}
+The exact-score order follows by evaluating
+$\widetilde\eta=(Z\widetilde\beta)B^\top$ and
+$Z^\top(\widetilde Y-\widetilde\mu)B$, choosing that multiplication order.
+The information order follows from one $O(NP^2)$ weighted basis
+product per subject and its distribution into $R^2$ coefficient blocks.
+For the Taylor row, cache $Z^\top\widetilde YB$, $Z^\top \widetilde Z$,
+and $Z^\top\mathbf1_M$ once.
+At an iterate form $a$ and $K_a=B^\top\diag(a)B$, then multiply
+$(Z^\top \widetilde Z)\widetilde\beta K_a$ using matrices of sizes $R$ and $P$.
+These costs do not apply unchanged to the data-dependent
+NB correction in \eqref{lesion-nb-taylor}.
+Input storage, sparse count projections, basis sparsity, and batching
+affect actual resource usage, and a small approximate score cost does
+not establish its accuracy.
+
+\section{Hand calculations and a paper-specific review checklist}
+
+\subsection{A two-subject, two-voxel spatial model}
+Take $B=I_2$ and
+$Z=\bigl(\begin{smallmatrix}1&0\\1&1\end{smallmatrix}\bigr)$.
+Order $\beta=(\beta_{1,1},\beta_{1,2},\beta_{2,1},\beta_{2,2})^\top$,
+with the first covariate the intercept.
+At $\beta=0$, all $\mu_{ij}=1$ and
+\[
+ X=\begin{pmatrix}1&0&0&0\\0&1&0&0\\1&0&1&0\\0&1&0&1\end{pmatrix},
+ \quad
+ H_{\rm P}=
+ \begin{pmatrix}2&0&1&0\\0&2&0&1\\1&0&1&0\\0&1&0&1\end{pmatrix}.
+\]
+This is an algebraic evaluation point, not a recommended fitted
+binary mean. With binary counts $(0,1,1,0)$ and $\alpha=1$,
+the NB observed weights are $(1,2,2,1)/4$, yielding
+\[
+ H_{\rm NB}=
+ \begin{pmatrix}
+ 3/4&0&1/2&0\\0&3/4&0&1/4\\1/2&0&1/2&0\\0&1/4&0&1/4
+ \end{pmatrix},
+ \qquad I_{\rm NB}=\tfrac12H_{\rm P}.
+\]
+Each entry is the sum of four weighted design-row products.
+This makes the observed/expected distinction directly checkable
+without a numerical differentiation package.
+
+\subsection{Decisions that must be explicit when reading the manuscript}
+\begin{center}\small
+\begin{tabularx}{\textwidth}{lT}
+\toprule
+Location & Required interpretation or correction\\
+\midrule
+S1.2 versus (2.8) & Conditioning Poisson on zero/one gives logistic;
+the unconditioned Poisson objective is different\\
+(2.9)--(2.10) & NB is a count working model on binary observations,
+not a literal positive-dispersion Bernoulli family\\
+(2.11), Algorithm 1 & Identify the additive intercepts and embed the
+$P$-vector fit into $PR$ coordinates explicitly\\
+(2.12), Algorithm 1 & NB score has the denominator $1+\alpha\mu$\\
+(2.13) & Exact for separable Poisson weights; approximate for general NB\\
+Fixed-step iteration & SPD preconditioning alone does not guarantee
+convergence of an undamped unit-step update\\
+(2.14), S2.1 & Use centered $Q_MZ$, unweighted $B$ in the data
+projection, vector $\beta$ in the Kronecker term, and preserve
+the single-weight $B^\top\widetilde B$ product\\
+(2.14), moving expansion point & Its approximate score can have a
+nonsymmetric Jacobian; it is not automatically a likelihood gradient\\
+(2.15)--(2.16) & Contrasts need not sum to one; ranks and dimensions
+determine degrees of freedom. Keep $W_j$ signed and use marginal
+covariance diagonals for the vectorized standard errors\\
+(2.18) & Use the family's own subject score and matching bread\\
+S2.2 & QR's $\mathcal R$ is upper triangular; retain the column-stacked
+scores and correct two-solve order\\
+S2.3 & Translate the basis-first coefficient order, keep the subject
+Gram factor $\diag(M,S_Z)$, and do not insert voxel moments into it\\
+\bottomrule
+\end{tabularx}
+\end{center}
+These qualifications distinguish mathematical changes from performance
+improvements. They do not claim to assess every simulation, empirical
+conclusion, or implementation associated with the manuscript.
+The count-model symbolic identities in \texttt{proofs/appendix.py}
+and related repository modules support parts of this exposition;
+the new paper-specific text and corrections are not automatically
+covered by the existing Lean inventory.
+
+\subsection{Editable source and independent build}
+This document is self-contained: it does not require the combined
+appendix or the other paper's appendix to be read.
+Its editable source is \texttt{docs/cbmr\_paper\_appendix.tex}.
+From the repository root:
+\begin{verbatim}
+make cbmr-paper-appendix
+\end{verbatim}
+Build both paper-specific appendices with \texttt{make paper-appendices}.
+The original papers and combined expanded appendix are preserved.
+\end{document}

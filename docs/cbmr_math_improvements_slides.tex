@@ -345,6 +345,79 @@ requested dense covariance still requires $O(n_\theta^2)$ storage.
 \end{alertblock}
 \end{frame}
 
+\begin{frame}{Checks run: symbolic identities and numerical implementations}
+\begin{columns}[T,onlytextwidth]
+\column{0.48\textwidth}
+\begin{block}{Exact symbolic checks}
+\begin{itemize}
+  \item \texttt{make proofs}: \textbf{120 claims closed}.
+  \item Every accepted SymPy residual reduced exactly to zero.
+\end{itemize}
+\end{block}
+\begin{block}{Implementation tests}
+\begin{itemize}
+  \item \texttt{make numerical}: \textbf{29 tests passed}.
+  \item Comparison unit tests: \textbf{13 tests passed}.
+\end{itemize}
+\end{block}
+\column{0.49\textwidth}
+\begin{block}{Seeded floating-point regression}
+\begin{itemize}
+  \item \textbf{512 required checks; 0 failures}.
+  \item Derivatives: 312 checks; largest relative Frobenius error
+        $3.14\times10^{-12}$.
+  \item Covariance: 29 checks; largest relative error
+        $2.99\times10^{-16}$.
+  \item Fit agreement: 100 checks; largest relative error
+        $3.47\times10^{-6}$.
+  \item 47 additional diagnostics retained for difficult cases; they are
+        reported separately from required failures.
+\end{itemize}
+\end{block}
+\end{columns}
+\vfill
+\scriptsize Float64 derivatives were checked against independent autodiff;
+structured covariance against dense references; fits at matched objectives.
+Dispersion was fixed.
+\end{frame}
+
+\begin{frame}{Formal coverage and measured full-pool performance}
+\begin{columns}[T,onlytextwidth]
+\column{0.48\textwidth}
+\begin{block}{Lean/Mathlib audit}
+\begin{itemize}
+  \item \textbf{358 theorem declarations audited}; the axiom audit passed.
+  \item Appendix display inventory: \textbf{30 proved, 15 partial,
+        9 pending} (54 total).
+  \item Prose derivations: \textbf{8 proved, 1 partial, 6 pending}
+        (15 total).
+  \item Thus the Lean check is substantive but the full appendix is
+        \alert{not fully formalised}.
+\end{itemize}
+\end{block}
+\column{0.49\textwidth}
+\begin{block}{Real 21-group diagnosis pool}
+\small Same full run, including 20 one-versus-rest contrasts:
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lrr}
+\toprule
+Method & Time & Peak memory\\
+\midrule
+Stock autodiff & did not run & 28.7 GB estimated\\
+Chunked autodiff & 769 s & 5.49 GB\\
+Closed form & \textbf{44 s} & \textbf{2.67 GB}\\
+\bottomrule
+\end{tabular}
+}
+\end{center}
+\end{block}
+\end{columns}
+\vfill
+\scriptsize One measured run, not a performance guarantee. Lean formalisation
+is partial; empirical agreement is not a formal proof.
+\end{frame}
+
 \begin{frame}{What is proved, and what remains a modeling choice}
 \begin{columns}[T,onlytextwidth]
 \column{0.49\textwidth}

@@ -1,0 +1,1192 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,booktabs,tabularx,microtype}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue}
+\emergencystretch=4em
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\blkdiag}{\operatorname{blkdiag}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\E}{\operatorname{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\vecrow}{\operatorname{vec}_{\mathrm{row}}}
+\setcounter{tocdepth}{1}
+\newcolumntype{T}{>{\raggedright\arraybackslash}X}
+\input{generated/appendix_equations}
+\renewcommand{\thesection}{S\arabic{section}}
+\numberwithin{equation}{section}
+
+\title{Supplementary Appendix:\\
+Unified Models, Exact Information and Covariance\\
+for Spatial Regression and CBMR}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-2em}
+\begin{abstract}
+This appendix brings together the lesion-regression manuscript
+\texttt{cbmr\_paper.pdf}, the published multi-group CBMR model
+\texttt{imag.a.1057.pdf}, and the closed-form Hessian and covariance
+notes~\cite{hessian,covariance}.
+The central distinction is between CBMR with spatially constant covariate
+effects (GC-CBMR) and CBMR with spatially varying covariate effects
+(SV-CBMR). These predictor choices are separate from the four observation models.
+For each model we specify the likelihood, whether data reduction is exact,
+and the resulting information matrix. The shared computational improvements
+are weighted basis products, structured inversion, and symmetric
+eigenvalue diagnostics. Roughness penalties, shared-covariate uncertainty,
+robust covariance and bootstrap inference are treated explicitly rather than
+conflated with likelihood simplification. Accompanying SymPy checks verify
+exact algebraic identities, not statistical calibration or numerical benchmarks.
+\end{abstract}
+\tableofcontents
+\clearpage
+
+\section{Two CBMR covariate-effect specifications and notation}\label{sec:notation}
+
+\subsection{The key distinction: constant effects, not constant covariate values}
+This appendix uses \textbf{GC-CBMR} for CBMR with \emph{globally constant
+covariate effects across voxels}, and \textbf{SV-CBMR} for CBMR with
+\emph{spatially varying covariate effects}. These are descriptive labels
+for the two parameterisations, not different observation distributions.
+In both cases the covariate value $Z_{ir}$ may differ between studies.
+What changes is the coefficient multiplying it at voxel $j$:
+\begin{equation}\label{eq:effect-distinction}
+ \frac{\partial\log\mu_{ij}}{\partial Z_{ir}}=
+ \begin{cases}
+ \gamma_r,&\text{GC-CBMR: constant across }j,\\
+ b_r(j)=B_j^\top\beta_r,&\text{SV-CBMR: a spatial coefficient map}.
+ \end{cases}
+\end{equation}
+Here $\beta_r\in\R^P$ is the coefficient block for covariate $r$ within the
+stacked SV-CBMR vector $\beta$; group membership and other covariates are
+held fixed. For a one-unit change in a continuous covariate, the mean ratio
+is $\exp(\gamma_r)$ everywhere under GC-CBMR, but
+$\exp\{b_r(j)\}$ under SV-CBMR. The same ratio describes a binary
+covariate's change from 0 to 1 when the predictor is linear in that covariate.
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{lTT}
+\toprule
+Question & GC-CBMR: constant effects & SV-CBMR: varying effects\\
+\midrule
+What varies spatially? & Group baseline maps $B_j^\top\xi_g$;
+the moderator coefficient $\gamma_r$ does not &
+The coefficient $b_r(j)$ of each modelled covariate\\
+Effect of one covariate & One scalar $\gamma_r$ per specified global effect &
+One $P$-coefficient basis expansion $\beta_r$ per effect\\
+Interpretation & A common multiplicative scaling of a group's map &
+A location-dependent change in the spatial pattern\\
+Main computation & Separable mean factors and grouped reductions
+(Section~\ref{sec:extensions}) &
+Kronecker-design block assembly, generally nonseparable means
+(Section~\ref{sec:master})\\
+Main covariate test & A global contrast of $\gamma$ &
+A voxelwise contrast of $b_r(j)$\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\textbf{A spatially varying baseline does not make a covariate effect
+spatially varying.} Also, ``constant across voxels'' and ``shared across
+groups'' are different restrictions: group-specific coefficients
+$\gamma_{gr}$ can still be spatially constant within each group.
+
+\subsection{A matched example with the same groups and one covariate}\label{sec:matched-example}
+For a study covariate $x_i$ and the same group baseline
+$f_g(j)=B_j^\top\xi_g$, compare
+\begin{align}
+ \eta_{ij}^{\mathrm{GC}}&=f_{g(i)}(j)+x_i\gamma_x,\\
+ \eta_{ij}^{\mathrm{SV}}&=f_{g(i)}(j)+x_i b_x(j),\qquad
+ b_x(j)=B_j^\top\beta_x.
+\end{align}
+GC-CBMR asks whether $x_i$ scales the map up or down by the same ratio
+everywhere. SV-CBMR asks \emph{where} its effect is positive, negative or
+absent. A positive $\gamma_x$ raises the mean at every voxel, whereas
+$b_x(j)$ can have different signs at different locations.
+
+With $G$ groups and a basis of size $P$, these examples have $GP+1$ and
+$(G+1)P$ regression coefficients, respectively, before identification
+constraints. In the general notation below the GC-CBMR covariate matrix
+is $Z=x$ with a separate group-membership matrix $L$; the corresponding
+SV-CBMR covariate matrix is $Z=[\,L\ \ x\,]$, whose group-indicator
+columns encode the baseline maps. Thus $R$ always means the number of
+columns of the \emph{specified} $Z$, not necessarily the same count in
+the two designs.
+
+If the basis contains a constant function, $Bc_B=\mathbf1_N$, the
+restriction $\beta_x=\gamma_x c_B$ reduces this SV-CBMR example exactly
+to GC-CBMR. Constancy is a restriction on the \emph{function}
+$B\beta_x$, not in general equality of its basis coefficients. The
+corresponding study mean becomes separable; merely observing similar
+effect estimates at a few voxels is not an exact separability condition.
+
+\subsection{How the models fit together}
+The lesion manuscript~\cite{lesion} and the published CBMR
+article~\cite{published} differ in both their \emph{predictor design} and
+their \emph{observation likelihood}. These are separate choices.
+The former supplies the SV-CBMR specification (Design A below);
+the latter supplies the GC-CBMR specification (Design B below).
+Poisson, independent NB and clustered NB
+likelihoods can be differentiated under either affine predictor.
+The efficient aggregated-NB formulas here specifically use the grouped
+separable predictor.
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{lTT}
+\toprule
+Observation model & Data and stochastic assumption & Reduction and destination\\
+\midrule
+Poisson & Independent cell counts; variance equals mean &
+Exact block assembly; grouped model uses both count marginals
+(Sections~\ref{sec:families}, \ref{sec:group-poisson})\\
+Independent NB & Independent cell counts with variance
+$\mu_{ij}+\alpha_g\mu_{ij}^2$ &
+Exact cellwise score and weights; generally no marginal-only likelihood
+(Section~\ref{sec:families})\\
+Aggregated NB & NB approximation to a sum of independent NB cells &
+Moment matching is approximate; differentiation of that working likelihood
+is exact (Section~\ref{sec:aggregate})\\
+Clustered NB & One shared gamma multiplier per study &
+Exact marginalisation; correlated voxels and rank-one curvature correction
+(Section~\ref{sec:clustered})\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Sections~\ref{sec:penalty}--\ref{sec:inference} then apply common estimation
+and inference machinery without changing the chosen model.
+
+\subsection{A single notation for both papers}
+We retain the principal symbols of Sections 2.2--2.4 of the lesion manuscript.
+An observational unit $i$ is a \emph{subject} there and a \emph{study} in CBMR;
+$j$ always indexes voxels. The same equations do not imply the same
+data-generating assumptions.
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Symbol & Dimension & Meaning\\
+\midrule
+$M,N$ & scalars & numbers of observational units and voxels\\
+$R,P$ & scalars & numbers of covariates and spatial basis functions\\
+$Y_{ij},\mu_{ij}$ & scalars & count and mean for unit $i$, voxel $j$\\
+$Z,B$ & $M\times R,\ N\times P$ & covariate and spatial design matrices\\
+$Z_i^\top,B_j^\top$ & $1\times R,\ 1\times P$ & rows of those matrices\\
+$X=Z\otimes B$ & $MN\times PR$ & full design, not explicitly constructed\\
+$\beta$ & $PR\times1$ & full-model spatial regression coefficients\\
+$\xi,\gamma$ & $P\times1,\ R\times1$ & separable-model spatial and global coefficients\\
+$G,\mathcal I_g,M_g$ & group count, set, size & $i\in\mathcal I_g$ iff $g(i)=g$\\
+$\xi_g$ & $P\times1$ & group-specific spatial coefficients\\
+$\alpha$ & scalar & NB dispersion, $\Var(Y_{ij})=\mu_{ij}+\alpha\mu_{ij}^2$\\
+$C$ & $S\times R$ & lesion-model covariate contrast matrix\\
+\bottomrule
+\end{tabular}
+\end{center}
+\subsection{SV-CBMR (Design A): spatially varying covariate effects}
+Subject $i$ varies slowest in the stacked vectors $Y,\mu$. Define
+$\widetilde\beta\in\R^{R\times P}$ by
+$\widetilde\beta_{rp}=\beta_{(r-1)P+p}$; thus
+$\beta=\vecrow(\widetilde\beta)$. The full predictor is
+\begin{equation}\label{eq:full}
+ \eta_{ij}=\log\mu_{ij}
+ =Z_i^\top\widetilde\beta B_j
+ =(Z_i^\top\otimes B_j^\top)\beta,\qquad
+ (\eta_{ij})_{i,j}=Z\widetilde\beta B^\top.
+\end{equation}
+This fixes the vectorisation convention explicitly.
+In particular $\beta_r=\widetilde\beta_{r\cdot}^{\top}$ and
+$b_r(j)=B_j^\top\beta_r$ in \eqref{eq:effect-distinction}.
+An intercept or group-indicator column in $Z$ supplies a spatial
+baseline; other columns supply spatially varying moderator effects.
+
+\subsection{GC-CBMR (Design B): spatially constant covariate effects}\label{sec:group-design}
+The single-group separable initialisation model in the lesion manuscript is
+a \emph{different parameterisation}:
+\begin{equation}\label{eq:separable}
+ \eta_{ij}=\eta_{Bj}+\eta_{Zi}=B_j^\top\xi+Z_i^\top\gamma,\qquad
+ \mu_{Bj}=e^{B_j^\top\xi},\quad \mu_{Zi}=e^{Z_i^\top\gamma},\quad
+ \mu_{ij}=\mu_{Bj}\mu_{Zi}.
+\end{equation}
+The published CBMR model generalises this to
+\begin{equation}\label{eq:group-predictor}
+ \eta_{ij}=B_j^\top\xi_{g(i)}+Z_i^\top\gamma,\qquad
+ \mu_{ij}=\mu_{B,g(i),j}\mu_{Zi},\qquad
+ \mu_{Bgj}=\exp(B_j^\top\xi_g).
+\end{equation}
+Let $L_{ig}=\mathbf1\{g(i)=g\}$ be the $M\times G$ membership matrix,
+$\xi_{\mathrm{all}}=(\xi_1^\top,\ldots,\xi_G^\top)^\top$, and
+$\vartheta=(\xi_{\mathrm{all}}^\top,\gamma^\top)^\top$. Then
+\begin{equation}\label{eq:group-design}
+ \eta=\mathcal X\vartheta,\qquad
+ \mathcal X=[\,L\otimes B\ \ Z\otimes\mathbf1_N\,],
+ \qquad \dim(\vartheta)=GP+R.
+\end{equation}
+This restates Equations 1--5 of the published article. Set $G=1$ to obtain
+\eqref{eq:separable}; omit the global block when there are no moderators.
+Group-specific global effects may be encoded by group-supported columns of
+$Z$; in that case $R$ counts all such columns. Separate group fits instead
+have separate parameter vectors and independent estimates when their data
+are independent.
+
+We use $\ell(\beta,\alpha)$ for the full-model log-likelihood and
+$\ell(\xi,\gamma,\alpha)$ for the separable model; $\gamma$ is not substituted
+for the full coefficient vector $\beta$.
+
+\subsection{Translation from the published article and source notes}
+\begin{center}\small
+\begin{tabularx}{\textwidth}{llT}
+\toprule
+Published CBMR symbol & Symbol here & Reason\\
+\midrule
+$X,\ x_j^\top$ & $B,\ B_j^\top$ & Reserve $X=Z\otimes B$ for Design A\\
+$\beta_g$ & $\xi_g$ & Reserve $\beta$ for spatially varying covariate effects\\
+$\mu_g^X,\ \mu^Z$ & $\mu_{Bg},\ \mu_Z$ & Same spatial/global mean factors\\
+$Y_{ti},\ Y_{gj}$ & $Y_{i\cdot},\ Y_{gj}$ & Study total and group--voxel total\\
+$r'_{gj},\ p'_{gj},\ \alpha'_g$ & $\rho_g,\ p_{gj},\ \alpha_g^{\mathrm{eff}}$ &
+Aggregated NB shape, probability and effective dispersion\\
+$\lambda_i$ & $\Lambda_i$ & Random study multiplier, not a smoothing weight\\
+$C\ (m\times S)$ & $C_G\ (S\times G)$ &
+$S$ always counts tested constraints here\\
+$J$ & $J_B$ & Roughness matrix; distinct from sandwich meat $\mathcal J$\\
+\bottomrule
+\end{tabularx}
+\end{center}
+In the source CBMR notes, $(n,V,K)$ correspond to $(M,N,P)$ here. Their
+non-spatial design $G$ becomes $Z$ in \eqref{eq:separable}, and their
+$(u_v,e_i,\theta)$ become $(\mu_{Bj},\mu_{Zi},\alpha)$. Pattern counts are
+denoted by $G$ for grouped CBMR, not by $P$, which is reserved
+for basis size. Their NB shape $R_p$ is renamed $\rho_g$ to avoid collision
+with the lesion manuscript's covariate count $R$. $C$ remains a contrast matrix and is
+not used for an information cross block. $C_G$ and $C_\gamma$ distinguish
+group and global-covariate contrasts from the lesion manuscript's $C$.
+
+\subsection{Scope and inferential assumptions}
+All regression derivatives hold dispersion fixed, including when it is set to
+an estimate $\widehat\alpha$ (or $\widehat\alpha_g$). They do not propagate dispersion-estimation
+uncertainty. If joint observed-information inference is required, the
+dispersion row and column must also be included before inversion. All inverses
+below require an identifiable parameterisation and nonsingular stated blocks.
+Mean-centering covariates does not by itself establish full rank, especially
+when covariates are constant within groups or a basis has redundant columns.
+Binary data do not make a Poisson or NB working likelihood identical to a
+Bernoulli likelihood.
+
+\section{SV-CBMR: exact design and Hessian assembly}\label{sec:master}
+
+For SV-CBMR, let the negative log-likelihood be
+$F(\beta)=\sum_{i,j}f_{ij}(\eta_{ij})$, holding all non-regression quantities
+fixed. Write $s_{ij}=-f'_{ij}(\eta_{ij})$ and
+$w_{ij}=f''_{ij}(\eta_{ij})$. With
+$X_i=Z_i^\top\otimes B\in\R^{N\times PR}$ and
+$W_i^{\mathrm{obs}}=\diag(w_{i1},\ldots,w_{iN})$,
+\begin{align}
+ \nabla_\beta\ell &= \sum_i X_i^\top s_i, \label{eq:score}\\
+ H=-\nabla_\beta^2\ell
+ &=\sum_i X_i^\top W_i^{\mathrm{obs}}X_i
+ =\sum_i (Z_iZ_i^\top)\otimes
+       \bigl(B^\top W_i^{\mathrm{obs}}B\bigr), \label{eq:master}\\
+ H_{(r,p),(r',p')}
+ &=\sum_i Z_{ir}Z_{ir'}\sum_j w_{ij}B_{jp}B_{jp'}.
+ \label{eq:entry}
+\end{align}
+\begin{proof}
+The derivative of $\eta_{ij}$ in $\beta_{(r,p)}$ is $Z_{ir}B_{jp}$
+and every second derivative of $\eta_{ij}$ is zero. Applying the chain rule
+to each $f_{ij}$ therefore gives \eqref{eq:entry}, with no predictor-curvature
+term. The Kronecker mixed-product identity gives \eqref{eq:master}.
+\end{proof}
+This is the source notes' affine-predictor lemma in the unified notation.
+No independence claim about real lesion data is needed to differentiate the
+working likelihood. Its statistical consequences are addressed by the sandwich
+estimator in Section~\ref{sec:inference}.
+
+Equation~\eqref{eq:master} can be evaluated subjectwise or in batches. It does
+not require $X$, an $MN\times MN$ diagonal matrix, or a
+$(PR)\times M\times N$ derivative intermediate. A weighted basis product
+$B^\top\diag(w_i)B$ costs $O(NP^2)$ for a dense basis, with an $N\times P$
+workspace; scatter into the $R^2$ coefficient blocks costs $O(R^2P^2)$
+per subject. Dense information storage still costs $O((PR)^2)$.
+If many subjects have exactly the same row of $Z$, their weights may first be
+summed at each voxel and the weighted basis product computed once per distinct
+row. No approximation is involved.
+The affine chain rule is shared by both specifications.
+For GC-CBMR (Design B) use the corresponding study rows $\mathcal X_i$ from
+\eqref{eq:group-design}. More generally, if the study likelihood depends
+jointly on its log-mean vector, the same affine chain rule gives
+$H=\sum_i\mathcal X_i^\top W_i^{\mathrm{obs}}\mathcal X_i$ with
+$W_i^{\mathrm{obs}}=\nabla_{\eta_i}^2(-\ell_i)$.
+Independent-cell models make $W_i^{\mathrm{obs}}$ diagonal; clustered NB
+has the diagonal-minus-rank-one form in
+\eqref{eq:cluster-local-information}.
+
+\section{Observation likelihoods shared by both specifications}\label{sec:families}
+
+The Poisson or NB choice does not determine whether the covariate effect
+is spatially constant or varying. The scalar derivatives below apply to
+either predictor. Projection into regression coefficients uses $X_i$
+for SV-CBMR and $\mathcal X_i$ for GC-CBMR.
+
+\subsection{Scalar derivatives and Fisher weights}
+For one cell, suppress indices and put $\mu=e^\eta$. With parameter-free
+terms retained or discarded consistently, the two log-likelihoods are
+\begin{align}
+ \ell_{\mathrm{P}}&=Y\eta-e^\eta-\log\Gamma(Y+1),\\
+ \ell_{\mathrm{NB}}&=\log\Gamma(Y+\alpha^{-1})-\log\Gamma(\alpha^{-1})
+ -\log\Gamma(Y+1)+Y\log\alpha+Y\eta
+ -(Y+\alpha^{-1})\log(1+\alpha e^\eta).
+ \label{eq:nb-ll}
+\end{align}
+For $Y\in\{0,1\}$, the gamma terms and $Y\log\alpha$ cancel, recovering
+Equation 2.10 of the lesion manuscript. The exact scalar derivatives are
+\begin{align}
+ s_{\mathrm{P}}=\frac{\partial\ell_{\mathrm{P}}}{\partial\eta}
+   &=\AppendixPoissonScore,&
+ w_{\mathrm{P}}=-\frac{\partial^2\ell_{\mathrm{P}}}{\partial\eta^2}
+   &=\AppendixPoissonWeight,\label{eq:poisson-weights}\\
+ s_{\mathrm{NB}}=\frac{\partial\ell_{\mathrm{NB}}}{\partial\eta}
+   &=\AppendixNBScore,&
+ w_{\mathrm{NB}}^{\mathrm{obs}}
+   =-\frac{\partial^2\ell_{\mathrm{NB}}}{\partial\eta^2}
+   &=\AppendixNBObserved,\label{eq:nb-weights}\\
+ w_{\mathrm{NB}}^{\mathrm{F}}
+   =\E[w_{\mathrm{NB}}^{\mathrm{obs}}]
+   &=\AppendixNBFisher.&&\label{eq:fisher-weight}
+\end{align}
+The right-hand sides of \eqref{eq:poisson-weights}--\eqref{eq:fisher-weight}
+are generated from the SymPy objects checked by \texttt{proofs/appendix.py}.
+The expectation uses only $\E[Y]=\mu$, since the observed NB weight is affine
+in $Y$. It agrees with
+$\Var(s_{\mathrm{NB}})=(\mu+\alpha\mu^2)/(1+\alpha\mu)^2$ under the NB model.
+Both NB weights and the NB score have the Poisson limits as $\alpha\to0^+$.
+
+Thus \eqref{eq:master} with $w^{\mathrm{obs}}$ gives the observed information
+$H$. Replacing it by $w^{\mathrm F}$ gives the Fisher information
+\begin{align}\label{eq:fisher}
+ I(\beta)=\sum_i X_i^\top W_iX_i,\qquad
+ W_i&=\diag(W_{i1},\ldots,W_{iN}),\\
+ W_{ij}&=
+ \begin{cases}
+ \mu_{ij},&\text{Poisson},\\
+ \mu_{ij}/(1+\alpha\mu_{ij}),&\text{independent NB}.
+ \end{cases}\notag
+\end{align}
+These match the weights in the lesion manuscript's Equation 2.17.
+For grouped independent NB use $\alpha_{g(i)}$ in the same formulas.
+For Poisson $H=I$ and
+neither contains $Y$ at fixed $\beta$; evaluated at $\widehat\beta$, both
+depend indirectly on the data through the fit. For NB, $H$ and $I$ generally
+differ even at a finite-sample optimum.
+
+\subsection{The NB score is not the Poisson residual score}
+The same log link does \emph{not} give the same score for the two families:
+\begin{equation}\label{eq:nb-score}
+ U_i=\nabla_\beta\ell_i=
+ \begin{cases}
+ X_i^\top(Y_i-\mu_i),&\text{Poisson},\\
+ X_i^\top\diag\bigl((1+\alpha\mu_i)^{-1}\bigr)(Y_i-\mu_i),
+       &\text{independent NB}.
+ \end{cases}
+\end{equation}
+Vector divisions and powers here and below are elementwise.
+For NB Fisher scoring the exact update direction is
+$I(\beta)^{-1}\sum_i U_i$. Equivalently, the IRLS working response is
+$\eta+(Y-\mu)/\mu$ and multiplying its residual by the Fisher weights gives
+$(Y-\mu)/(1+\alpha\mu)$, not $Y-\mu$.
+Consequently the unweighted NB residual in the lesion manuscript's update and
+score discussion must not be used as an NB likelihood score. This appendix
+retains the manuscript's notation while making that mathematical distinction explicit.
+
+\subsection{What separability does and does not simplify}
+At a mean of the form $\mu_{ij}=\mu_{Zi}\mu_{Bj}$, the \emph{full-model}
+Poisson information has the exact factorisation
+\begin{equation}\label{eq:kron-information}
+ I_{\mathrm P}(\beta)
+ =(Z^\top W_ZZ)\otimes(B^\top W_BB),\qquad
+ W_Z=\diag(\mu_Z),\quad W_B=\diag(\mu_B).
+\end{equation}
+This follows by applying the mixed-product identity to
+$X^\top(W_Z\otimes W_B)X$.
+When both factors are nonsingular its inverse is the Kronecker product of
+their inverses. Factorisation costs $O(R^3+P^3)$ instead of $O((PR)^3)$;
+materialising a dense covariance still requires $O((PR)^2)$ storage.
+Fixing these weights at an initial fit gives a preconditioner, not the
+current information of a nonseparable full-model fit. Convergence additionally
+requires a suitable optimisation procedure; a fixed preconditioner alone
+does not guarantee convergence.
+
+For NB, even separable means do not generally yield separable Fisher weights.
+For two subjects with factors $a,b$ and two voxels with factors $c,d$, let
+$W^*_{ij}=\mu_{Zi}\mu_{Bj}/(1+\alpha\mu_{Zi}\mu_{Bj})$. Then
+\begin{equation}\label{eq:nonseparable}
+ \det W^*=\AppendixNBWeightDet.
+\end{equation}
+This is generically nonzero for positive factors, $\alpha>0$, $a\ne b$ and
+$c\ne d$. A separable weight grid has rank one, so the Poisson factorisation
+cannot simply be relabelled as an exact NB factorisation. The block assembly
+\eqref{eq:master} remains exact for either NB weight.
+
+\section{GC-CBMR: grouped reductions and information}\label{sec:extensions}
+
+\subsection{Common grouped design and count summaries}
+Use GC-CBMR (Design B) throughout this section. Its spatially constant
+covariate effects yield the factorisation
+$\mu_{ij}=\mu_{B,g(i),j}\mu_{Zi}$.
+The grouped Poisson compression and aggregated-NB reparameterisation
+below rely on this structure and must not be transferred unchanged to
+unrestricted SV-CBMR. The local clustered-NB weights
+\eqref{eq:cluster-local-information}, by contrast, apply to either
+affine predictor when projected with the appropriate design.
+Define
+$Y_{gj}=\sum_{i\in\mathcal I_g}Y_{ij}$,
+$Y_{i\cdot}=\sum_jY_{ij}$, and
+$Y_{g\cdot}=\sum_{i\in\mathcal I_g}Y_{i\cdot}=\sum_jY_{gj}$.
+The vector $Y_g$ contains the group--voxel counts, not the full stacked
+observations. Set $Z_g$ to the rows of $Z$ in $\mathcal I_g$ and
+$\mu_{Zg}$ to the corresponding global mean factors.
+
+For one group, suppress $g$ and restrict study sums to $\mathcal I_g$.
+The cell design row for its spatial and shared global coefficients is
+$(B_j^\top,Z_i^\top)$.
+For any cellwise likelihood with observed weight $w_{ij}$,
+\begin{align}
+ H_{\xi\xi}&=B^\top\diag\left(\left\{\sum_i w_{ij}\right\}_j\right)B,\\
+ H_{\xi\gamma}&=\sum_{i,j}w_{ij}B_jZ_i^\top,\\
+ H_{\gamma\gamma}&=Z^\top\diag\left(\left\{\sum_j w_{ij}\right\}_i\right)Z.
+ \label{eq:separable-blocks}
+\end{align}
+Use \eqref{eq:poisson-weights} or \eqref{eq:nb-weights} for the observed
+information and \eqref{eq:fisher-weight} for independent NB Fisher information.
+These are $(P+R)\times(P+R)$ information matrices, not the $PR\times PR$
+matrix in \eqref{eq:kron-information}. In the joint grouped fit, place each
+spatial block in its own position, retain its cross block with $\gamma$,
+and sum the global blocks over groups. Clustered NB is not cellwise
+independent and instead uses Section~\ref{sec:clustered}.
+
+\subsection{Poisson: exact marginal compression, not loss of study totals}\label{sec:group-poisson}
+\paragraph{Likelihood and exact reduction.}
+Define $E_g=\sum_j\mu_{Bgj}$, $T_g=\sum_{i\in\mathcal I_g}\mu_{Zi}$,
+$a_g=B^\top\mu_{Bg}$ and $u_g=Z_g^\top\mu_{Zg}$.
+Substituting the grouped predictor into the independent Poisson
+log-likelihood and collecting terms gives, up to data-only constants,
+\begin{equation}\label{eq:group-poisson}
+ \ell_{\mathrm P}
+ =\sum_gY_g^\top\log\mu_{Bg}
+   +\sum_iY_{i\cdot}\log\mu_{Zi}-\sum_g E_gT_g.
+\end{equation}
+This is the computationally useful marginal expression in Equation 6 of
+the published article: both $Y_g$ and $Y_{i\cdot}$ must be retained when
+global covariates are estimated. Computing the mean term and scores uses
+group--voxel arrays and study vectors rather than an $M\times N$ mean array.
+
+There is an important distinction between this compression and fitting only
+$Y_{gj}\sim\operatorname{Poisson}(\mu_{Bgj}T_g)$. Up to data-only constants,
+\begin{equation}\label{eq:poisson-allocation}
+ \ell_{\mathrm{full}}-\ell_{\mathrm{totals}}
+ =\sum_g\sum_{i\in\mathcal I_g}Y_{i\cdot}
+                   \log\left(\frac{\mu_{Zi}}{T_g}\right).
+\end{equation}
+The missing term is the conditional multinomial allocation of each voxel's
+total across studies, with probabilities $\mu_{Zi}/T_g$. Its global score is
+\[
+ \sum_g\left\{\sum_{i\in\mathcal I_g}Y_{i\cdot}Z_i
+                         -Y_{g\cdot}\frac{u_g}{T_g}\right\}.
+\]
+Thus voxel totals alone do not generally give the same covariate likelihood.
+If the allocation probabilities are fixed rather than estimated, that term
+is parameter-free for the spatial fit.
+
+\paragraph{Exact information and scores.}
+The nonzero blocks reduce to
+\begin{align}\label{eq:separable-poisson}
+ H_{\xi_g\xi_g}&=T_g B^\top\diag(\mu_{Bg})B,&
+ H_{\xi_g\gamma}&=a_gu_g^\top,\\
+ H_{\gamma\gamma}&=\sum_gE_g Z_g^\top\diag(\mu_{Zg})Z_g.\notag
+\end{align}
+The scores are
+\[
+ \nabla_{\xi_g}\ell=B^\top(Y_g-T_g\mu_{Bg}),\qquad
+ \nabla_\gamma\ell=\sum_iZ_i(Y_{i\cdot}-E_{g(i)}\mu_{Zi}).
+\]
+For $G=1$ these are the separable-initialisation formulas of the lesion
+manuscript. Differentiation is exact; faster evaluation does not change
+the Poisson approximation used for binary data.
+
+\subsection{Aggregated NB: moment-matched totals and exact working curvature}\label{sec:aggregate}
+\paragraph{Likelihood and approximation boundary.}
+The NB calculation in \texttt{cbmr\_hessian.pdf} is not
+\eqref{eq:nb-ll} summed over individual subjects and voxels.
+It is the moment-matched NB likelihood for group--voxel totals in
+Equations 7--9 of the published article. Define
+\begin{equation}
+ s_{1g}=\sum_{i\in\mathcal I_g}\mu_{Zi},\qquad
+ s_{2g}=\sum_{i\in\mathcal I_g}\mu_{Zi}^2,\qquad
+ A_g=\frac{s_{1g}}{\alpha_gs_{2g}},\qquad
+ \rho_g=\frac{s_{1g}^2}{\alpha_gs_{2g}}=s_{1g}A_g.
+\end{equation}
+Here $\alpha_g>0$ is a group-specific extension of the lesion manuscript's global
+$\alpha$; setting all $\alpha_g=\alpha$ recovers a shared dispersion.
+The summed independent NB counts have moments
+\begin{align}
+ m_{gj}=\E[Y_{gj}]&=\mu_{Bgj}s_{1g},\\
+ \Var(Y_{gj})&=\mu_{Bgj}s_{1g}
+                    +\alpha_g\mu_{Bgj}^2s_{2g}.
+\end{align}
+Using the NB convention
+$\Pr(Y=y)=\Gamma(y+\rho)/[\Gamma(\rho)\Gamma(y+1)](1-p)^\rho p^y$,
+the matching distribution has
+\begin{equation}\label{eq:effective}
+ p_{gj}=\frac{\mu_{Bgj}}{\mu_{Bgj}+A_g},\qquad
+ \alpha_g^{\mathrm{eff}}=\frac{\alpha_gs_{2g}}{s_{1g}^2}
+ =\frac1{\rho_g},\qquad
+ \Var_{\mathrm{NB}}(Y_{gj})=m_{gj}
+                       +\alpha_g^{\mathrm{eff}}m_{gj}^2.
+\end{equation}
+This reduces the article's apparently voxel-specific shape $r'_{gj}$
+to a single shape $\rho_g$ per group. The spatial factor cancels exactly.
+It does not turn an arbitrary NB convolution into an NB distribution.
+For example, writing $s_{3g}=\sum_{i\in\mathcal I_g}\mu_{Zi}^3$,
+the third cumulant of the true sum minus that of the matched NB is
+\begin{equation}
+ 2\alpha_g^2\mu_{Bgj}^3
+       \left(s_{3g}-\frac{s_{2g}^2}{s_{1g}}\right).
+\end{equation}
+If every study factor in a group is equal, the independent NB summands
+have a common success probability and the NB convolution is exact;
+otherwise the higher cumulants need not match.
+
+Suppress $g$ within the following formulas and write
+$d_j=\mu_{Bj}+A$. Up to a data-only constant, the negative log-likelihood is
+\begin{equation}\label{eq:psi}
+ \begin{split}
+ \Psi(\rho,A,\eta_B)={}&-\sum_j\log\Gamma(Y_{gj}+\rho)
+ +N\log\Gamma(\rho)-N\rho\log A\\
+ &+\sum_j(\rho+Y_{gj})\log d_j-\sum_jY_{gj}\eta_{Bj}.
+ \end{split}
+\end{equation}
+\paragraph{Exact information for the matched likelihood.}
+It has diagonal log-spatial curvature
+\begin{equation}\label{eq:aggregate-weight}
+ w_j=\frac{(\rho+Y_{gj})\mu_{Bj}A}{d_j^2},\qquad
+ H_{\xi_g\xi_g}=B^\top\diag(w)B.
+\end{equation}
+For global coefficients, let $\rho_r=\partial\rho/\partial\gamma_r$ and
+$A_r=\partial A/\partial\gamma_r$, with analogous second derivatives.
+Then
+\begin{align}
+ (H_{\xi_g\gamma})_{pr}
+ &=\sum_j B_{jp}\left\{\frac{\mu_{Bj}}{d_j}\rho_r
+       -\frac{(\rho+Y_{gj})\mu_{Bj}}{d_j^2}A_r\right\},\\
+ (H_{\gamma\gamma}^{(g)})_{rr'}
+ &=\Psi_{\rho\rho}\rho_r\rho_{r'}
+ +\Psi_{\rho A}(\rho_rA_{r'}+A_r\rho_{r'})
+ +\Psi_{AA}A_rA_{r'}+\Psi_\rho\rho_{rr'}+\Psi_A A_{rr'}.
+ \label{eq:aggregate-chain}
+\end{align}
+The global block is summed over groups. With $\psi,\psi_1$ denoting digamma
+and trigamma,
+\begin{align}
+ \Psi_\rho&=-\sum_j\psi(Y_{gj}+\rho)+N\psi(\rho)-N\log A+\sum_j\log d_j,\\
+ \Psi_A&=-N\rho/A+\sum_j(\rho+Y_{gj})/d_j,\\
+ \Psi_{\rho\rho}&=-\sum_j\psi_1(Y_{gj}+\rho)+N\psi_1(\rho),\\
+ \Psi_{\rho A}&=-N/A+\sum_jd_j^{-1},\qquad
+ \Psi_{AA}=N\rho/A^2-\sum_j(\rho+Y_{gj})/d_j^2.
+\end{align}
+For an explicit evaluation of the inner-map derivatives, put
+\[
+ u_1=\sum_i\mu_{Zi}Z_i,\quad u_2=\sum_i\mu_{Zi}^2Z_i,\quad
+ \mathcal M_1=\sum_i\mu_{Zi}Z_iZ_i^\top,\quad
+ \mathcal M_2=\sum_i\mu_{Zi}^2Z_iZ_i^\top,
+\]
+with sums over $\mathcal I_g$, and define
+\[
+ l=u_1/s_1,\quad h=2u_2/s_2,\quad
+ \mathcal L_1=\mathcal M_1/s_1-u_1u_1^\top/s_1^2,\quad
+ \mathcal L_2=4\mathcal M_2/s_2-4u_2u_2^\top/s_2^2.
+\]
+Then
+\begin{align}
+ \nabla A&=A(l-h),&
+ \nabla^2 A&=A\{(l-h)(l-h)^\top+\mathcal L_1-\mathcal L_2\},\\
+ \nabla\rho&=\rho(2l-h),&
+ \nabla^2\rho&=\rho\{(2l-h)(2l-h)^\top+2\mathcal L_1-\mathcal L_2\}.
+\end{align}
+These follow by differentiating
+$\log A=\log s_1-\log s_2-\log\alpha_g$ and
+$\log\rho=2\log s_1-\log s_2-\log\alpha_g$.
+They retain the inner-map curvature terms in \eqref{eq:aggregate-chain}.
+The spatial weight tends to $s_1\mu_{Bj}$ as $\alpha_g\to0^+$.
+The reparameterisation is exact for this aggregated likelihood; it does not
+make the moment-matching approximation exact for arbitrary independent NB sums.
+The derivatives hold the \emph{original} $\alpha_g$ fixed, not
+$\alpha_g^{\mathrm{eff}}$. If instead effective dispersion is independently
+parameterised and held fixed, $\rho_g$ is constant and $A_g=\rho_g/s_{1g}$;
+its derivatives must be recomputed for that convention. Mixing these two
+conditioning choices changes the Hessian.
+
+\subsection{Clustered NB: exact study marginalisation and rank-one curvature}\label{sec:clustered}
+\paragraph{Likelihood and dependence.}
+The clustered extension places a shared gamma effect within each subject:
+$\Lambda_i\sim\operatorname{Gamma}(\nu_g,\text{rate }\nu_g)$,
+$\nu_g=1/\alpha_g$, and, conditionally on $\Lambda_i$,
+$Y_{ij}$ are independent Poisson with mean $\Lambda_i\mu_{Bgj}\mu_{Zi}$ for
+$i\in\mathcal I_g$.
+Independent $\Lambda_i$ across studies give
+\begin{equation}\label{eq:cluster-covariance}
+ \Cov(Y_i)=\diag(\mu_i)+\alpha_g\mu_i\mu_i^\top,\qquad
+ \Cov(Y_i,Y_{i'})=0\quad(i\ne i').
+\end{equation}
+This includes both the diagonal variance and the off-diagonal covariance
+in Equation 10 of the published article; the latter is absent under
+independent NB.
+
+Let $t_i=\sum_j\mu_{ij}=E_g\mu_{Zi}$. Exact marginalisation can be understood
+as a total-count model followed by spatial allocation:
+\begin{equation}\label{eq:cluster-factorisation}
+ Y_{i\cdot}\sim\mathrm{NB}(\text{mean }t_i,\text{shape }\nu_g),\qquad
+ Y_i\mid Y_{i\cdot}\sim
+ \mathrm{Multinomial}\left(Y_{i\cdot},
+                   \left\{\frac{\mu_{Bgj}}{E_g}\right\}_j\right).
+\end{equation}
+Multiplying these two mass functions cancels the total factorial and the
+allocation powers of $t_i$, giving the joint gamma--Poisson mass function.
+Unlike aggregated NB, this reduction is exact. Collecting its terms over
+studies gives Equation 11 of the article, up to data-only terms:
+\begin{equation}
+ \begin{split}
+ \ell_g={}&|\mathcal I_g|\nu_g\log\nu_g-|\mathcal I_g|\log\Gamma(\nu_g)
+ +\sum_{i\in\mathcal I_g}\log\Gamma(Y_{i\cdot}+\nu_g)\\
+ &-\sum_{i\in\mathcal I_g}(Y_{i\cdot}+\nu_g)\log(E_g\mu_{Zi}+\nu_g)
+ +\sum_jY_{gj}\eta_{Bgj}+\sum_{i\in\mathcal I_g}Y_{i\cdot}\eta_{Zi},
+ \end{split}
+\end{equation}
+where $E_g=\sum_j\mu_{Bgj}$. Write
+$d_i=E_g\mu_{Zi}+\nu_g$, $a_g=B^\top\mu_{Bg}$ and
+\[
+ g'_g=\sum_{i\in\mathcal I_g}\frac{(Y_{i\cdot}+\nu_g)\mu_{Zi}}{d_i},
+ \qquad
+ g''_g=-\sum_{i\in\mathcal I_g}\frac{(Y_{i\cdot}+\nu_g)\mu_{Zi}^2}{d_i^2}.
+\]
+\paragraph{Exact observed information.}
+Then
+\begin{align}
+ \nabla_{\eta_{Bg}}^2(-\ell_g)
+ &=g'_g\diag(\mu_{Bg})+g''_g\mu_{Bg}\mu_{Bg}^\top,\\
+ H_{\xi_g\xi_g}
+ &=g'_g B^\top\diag(\mu_{Bg})B+g''_g a_ga_g^\top,\\
+ H_{\xi_g\gamma}
+ &=a_g\left\{\sum_{i\in\mathcal I_g}
+       \frac{(Y_{i\cdot}+\nu_g)\nu_g\mu_{Zi}}{d_i^2}Z_i^\top\right\},\\
+ H_{\gamma\gamma}^{(g)}
+ &=\sum_{i\in\mathcal I_g}
+       \frac{(Y_{i\cdot}+\nu_g)\nu_g E_g\mu_{Zi}}{d_i^2}Z_iZ_i^\top.
+ \label{eq:clustered}
+\end{align}
+The rank-one term is a negative correction since $g''_g<0$.
+Only subject totals enter these Hessian weights: the terms containing the
+voxel marginals are linear in the coefficients and differentiate away.
+The result follows from differentiating a scalar function of
+$E_g=\sum_j e^{\eta_{Bgj}}$ twice. Thus the basis projection still needs only
+a weighted Gram matrix and one outer product, not an $N\times N$ matrix.
+
+\paragraph{Expected information and fixed-dispersion curvature.}
+For a single study expressed in its full log-mean vector $\eta_i$,
+the observed information before basis projection is
+\begin{equation}\label{eq:cluster-local-information}
+ W_i^{\mathrm{obs}}
+ =\frac{Y_{i\cdot}+\nu_g}{t_i+\nu_g}
+       \left\{\diag(\mu_i)-\frac{\mu_i\mu_i^\top}{t_i+\nu_g}\right\},
+ \qquad
+ W_i^{\mathrm F}=\diag(\mu_i)-\frac{\mu_i\mu_i^\top}{t_i+\nu_g}.
+\end{equation}
+The expectation uses $\E[Y_{i\cdot}]=t_i$. These weights are \emph{matrices},
+not the diagonal independent-NB weights. For any real vector $v$,
+\begin{equation}\label{eq:cluster-positive}
+ (t_i+\nu_g)v^\top W_i^{\mathrm F}v
+ =\nu_g\sum_j\mu_{ij}v_j^2
+   +\sum_{j<k}\mu_{ij}\mu_{ik}(v_j-v_k)^2.
+\end{equation}
+Consequently the conditional regression objective is convex for fixed
+$\nu_g>0$ and an affine log predictor. The same is true for independent
+Poisson and NB with fixed dispersion. This is not a claim of joint convexity
+when dispersion is also estimated, nor of convexity of the
+moment-matched NB composition in $(\xi_g,\gamma)$.
+
+\section{Roughness penalties and the fitted objective}\label{sec:penalty}
+
+\subsection{An explicit quadratic-penalty convention}
+The published article introduces a spatial roughness penalty in Section 2.1.1
+and Figure 2. To carry that improvement through the Hessian calculation,
+let $J_B=J_B^\top\succeq0$ be a fixed $P\times P$ roughness matrix and
+$\lambda_g\geq0$ fixed smoothing weights. We use the explicit convention
+\begin{equation}
+ \mathcal P(\vartheta)=\frac12\sum_g\lambda_g\xi_g^\top J_B\xi_g
+ =\frac12\vartheta^\top K\vartheta,\qquad
+ K=\blkdiag(\lambda_1J_B,\ldots,\lambda_GJ_B,0_{R\times R}).
+\end{equation}
+The factor $1/2$ is a convention: a penalty written without it has twice the
+gradient and Hessian for the same numerical $\lambda_g$. No particular
+roughness operator or smoothing weight is inferred from the PDF; its detailed
+construction is referred to Supplementary Appendix A.1 of the article,
+which is not included in the supplied PDF.
+
+For the minimised objective $F_{\mathrm{pen}}=-\ell+\mathcal P$,
+\begin{equation}\label{eq:penalty}
+ \nabla F_{\mathrm{pen}}=-\nabla\ell+K\vartheta,\qquad
+ H_{\mathrm{pen}}=H+K.
+\end{equation}
+Thus the closed-form information receives a fixed block-diagonal addition;
+the shared-global border and cross-group structural zeros are preserved.
+For SV-CBMR (Design A) use
+$K=\blkdiag(\lambda_1J_B,\ldots,\lambda_RJ_B)$ on the $R$ spatial maps.
+A roughness penalty need not penalise constant directions and therefore
+need not remove an intercept-identification problem.
+
+\subsection{Curvature is not automatically a sampling covariance}
+For an unpenalised likelihood, model-based covariance uses inverse
+information. For a penalised estimator, inverse penalised curvature is
+not generally its frequentist sampling covariance. Linearising the
+penalised estimating equation gives
+\begin{equation}\label{eq:penalty-covariance}
+ V_{\mathrm{pen}}\ \approx\
+ (H+K)^{-1}\mathcal J(H+K)^{-\top},
+\end{equation}
+where $\mathcal J$ is the variance estimate of the \emph{unpenalised}
+data score, not of a score with the penalty repeatedly added per study.
+Under a correctly specified model replace the bread $H$ and score variance
+by $I$ to obtain $(I+K)^{-1}I(I+K)^{-1}$. In particular,
+\begin{equation}
+ (I+K)^{-1}-(I+K)^{-1}I(I+K)^{-1}
+ =(I+K)^{-1}K(I+K)^{-1}.
+\end{equation}
+This identity distinguishes penalised curvature from sampling variation;
+neither expression by itself accounts for smoothing bias or data-driven
+smoothing-parameter uncertainty.
+Alternating dispersion and regression updates, as in the article's
+Algorithm 1, does not remove these distinctions. A final inference step
+must state whether it uses likelihood information, penalised curvature,
+or a penalised estimating-equation sandwich.
+
+\section{From information to covariance}\label{sec:covariance}
+
+The following linear-algebra identities apply to a symmetric nonsingular
+information matrix, whether $H$ is observed information or $I$ is the Fisher
+information. They do not change which statistical estimator has been chosen.
+
+\subsection{Structural zeros are determined by the design}
+For the full independent-cell model, \eqref{eq:entry} shows that the
+$(r,r')$ coefficient block vanishes if no subject loads both covariates:
+$Z_{ir}Z_{ir'}=0$ for every $i$. More generally, connect two covariate
+columns when they co-occur in any row of $Z$, and take connected components.
+Different components have zero cross blocks, so after reordering,
+\begin{equation}
+ H=\blkdiag(H_1,\ldots,H_{K_{\mathrm{comp}}}),\qquad
+ H^{-1}=\blkdiag(H_1^{-1},\ldots,H_{K_{\mathrm{comp}}}^{-1}).
+ \label{eq:block}
+\end{equation}
+Here $K_{\mathrm{comp}}$ counts connected components, while $K$ in
+Section~\ref{sec:penalty} is a penalty matrix. The conclusion follows
+from the factor $Z_{ir}Z_{ir'}$ and block multiplication.
+Two columns can have a zero direct cross block while remaining in the same
+component through a third column; that does not license separate inversion.
+Cell-means indicators for disjoint groups separate, whereas a shared intercept
+or overlapping continuous covariates generally connect the spatial columns.
+
+The group-specific $\xi_g$ in Section~\ref{sec:extensions} likewise have no
+cross-group spatial Hessian terms. Shared $\gamma$ coefficients usually
+couple the groups through a border; the full covariance then need not be
+block diagonal.
+
+\subsection{Schur inversion when global coefficients form a border}
+Let $d=GP$ be the number of grouped spatial coefficients; the number of
+global coefficients is $R$. To keep the scalar intensity total $E_g$
+distinct from an information block, write
+\begin{equation}
+ H=\begin{pmatrix}\mathcal D&\mathcal F\\
+                 \mathcal F^\top&\mathcal E\end{pmatrix},\qquad
+ \mathcal D=\blkdiag(D_1,\ldots,D_{K_{\mathrm{comp}}}),\quad
+ \mathcal F\in\R^{d\times R},\qquad
+ \mathcal S=\mathcal E-\mathcal F^\top\mathcal D^{-1}\mathcal F.
+\end{equation}
+If $\mathcal D$ and $\mathcal S$ are nonsingular,
+\begin{equation}\label{eq:schur}
+ H^{-1}=
+ \begin{pmatrix}
+ \mathcal D^{-1}+\mathcal D^{-1}\mathcal F\mathcal S^{-1}
+                 \mathcal F^\top\mathcal D^{-1}
+ &-\mathcal D^{-1}\mathcal F\mathcal S^{-1}\\
+ -\mathcal S^{-1}\mathcal F^\top\mathcal D^{-1}&\mathcal S^{-1}
+ \end{pmatrix}.
+\end{equation}
+Multiplying by $H$ proves the identity using
+$\mathcal E=\mathcal S+\mathcal F^\top\mathcal D^{-1}\mathcal F$.
+With $\mathcal F=0$ it reduces to independent
+block inversion. Use solves with $D_k$ and $\mathcal S$ rather than explicitly
+forming intermediate inverses whenever only contrasts or selected entries
+are required.
+Writing $d_k=\dim D_k$, factorisation costs
+$O(\sum_kd_k^3+R^3)$; solving for $\mathcal D^{-1}\mathcal F$ costs
+$O(\sum_kd_k^2R)$, forming the Schur complement costs $O(dR^2)$, and forming
+the dense spatial covariance correction costs $O(d^2R)$.
+An invertible $H$ can have a singular leading block $\mathcal D$, so invertibility of
+$H$ alone is not sufficient for this particular Schur formula.
+
+\subsection{Shared covariates induce cross-group covariance}\label{sec:shared}
+For grouped CBMR take $D_g=H_{\xi_g\xi_g}$ and
+$F_g=H_{\xi_g\gamma}$, so $\mathcal F$ stacks the $F_g$ vertically.
+Under the observed-information covariance choice $V_\vartheta=H^{-1}$,
+\begin{align}\label{eq:shared-covariance}
+ (V_\vartheta)_{\gamma\gamma}&=\mathcal S^{-1},\\
+ (V_\vartheta)_{\xi_g\xi_h}
+ &=\mathbf1\{g=h\}D_g^{-1}
+       +D_g^{-1}F_g\mathcal S^{-1}F_h^\top D_h^{-1}.
+\end{align}
+Thus a block-diagonal \emph{spatial information block} does not imply
+independent spatial estimates after estimating shared $\gamma$.
+For global-covariate inference, $\mathcal E^{-1}$ would treat the spatial
+coefficients as known; $\mathcal S^{-1}$ accounts for their estimation.
+The same block identities hold using $I$ instead of $H$, or for penalised
+curvature after replacing $\mathcal D$ by its penalised version, but the
+latter is not automatically the sampling covariance
+\eqref{eq:penalty-covariance}.
+
+This matters directly for Equation 14 of the published article: the small
+dimension of $\gamma$ does not ensure nonsingular or well-conditioned
+profile information. A global covariate confounded with group intercepts
+can make $\mathcal S$ singular regardless of the magnitude of its
+coefficient. Independently fitted groups have zero cross-covariance only
+when their data and fitted parameter vectors are genuinely separate.
+
+\subsection{Condition number from symmetric eigenvalues}
+If $H=Q\Lambda Q^\top$ with orthogonal $Q$, then
+$H^\top H=Q\Lambda^2Q^\top$. Consequently,
+\begin{equation}\label{eq:condition}
+ \kappa_2(H)=\frac{\max_a|\lambda_a(H)|}{\min_a|\lambda_a(H)|}.
+\end{equation}
+Positive definiteness is not needed for this identity. For a singular matrix
+the finite inverse and finite condition number are unavailable.
+For \eqref{eq:block}, the characteristic polynomial is the product of the
+block characteristic polynomials, hence
+\[
+ \kappa_2(H)=
+ \frac{\max_k\max_a|\lambda_a(H_k)|}
+      {\min_k\min_a|\lambda_a(H_k)|}.
+\]
+This is not in general $\max_k\kappa_2(H_k)$.
+For a bordered matrix, the eigenvalues of $\mathcal D$ and $\mathcal S$ are
+\emph{not} the eigenvalues of $H$; use the full symmetric eigenproblem.
+All these equalities are exact algebraically; numerical eigensolvers and
+inverses still incur rounding error.
+
+An appropriate computation uses structural blocks when available, otherwise
+Schur inversion when its hypotheses hold, otherwise Cholesky for a
+positive-definite matrix or a general factorisation for a nonsingular
+indefinite matrix. The latter is an algebraic inverse, not evidence of a valid
+positive covariance estimate. Failed factorisations or singularity must be
+reported rather than replaced by an apparently valid covariance.
+
+The source covariance note also considers LAPACK's \texttt{pocon}, which
+estimates $\kappa_1$, not $\kappa_2$. Norm equivalence gives
+$n^{-1}\kappa_1(H)\leq\kappa_2(H)\leq n\kappa_1(H)$ for an $n\times n$
+matrix; it neither makes the norms equal nor bounds the estimator's error
+by itself. A symmetric eigensolver targets the required 2-norm quantity.
+The source notes' timing and memory measurements are empirical results,
+not consequences of the symbolic proofs and not benchmarks of this appendix.
+
+\section{Model-based and robust voxelwise inference}\label{sec:inference}
+
+\subsection{SV-CBMR: voxelwise covariate-effect contrasts}
+All quantities in this section are evaluated at the fitted parameters.
+The lesion manuscript's model-based choice is
+$V_\beta=\widehat{\Cov}(\widehat\beta)=I(\widehat\beta)^{-1}$.
+An observed-information alternative uses $H(\widehat\beta)^{-1}$; they agree
+for Poisson, not generally for NB.
+For $\mathcal T_j=C\otimes B_j^\top$, the voxelwise log-contrast and covariance are
+\begin{equation}\label{eq:contrast}
+ \widehat\eta_{Cj}=\mathcal T_j\widehat\beta,\qquad
+ V_{Cj}=\mathcal T_jV_\beta\mathcal T_j^\top.
+\end{equation}
+For $S$ linearly independent contrast rows with nonsingular $V_{Cj}$, the
+quadratic statistic
+$\widehat\eta_{Cj}^\top V_{Cj}^{-1}\widehat\eta_{Cj}$
+has the usual asymptotic $\chi^2_S$ null law under the statistical regularity
+conditions. When $S=1$, its signed square root is the Wald statistic.
+The degrees of freedom must be reduced if the tested constraints are
+redundant. A contrast need not have row sum one; difference contrasts
+naturally have row sum zero.
+
+\subsection{GC-CBMR: group-map contrasts and global covariate tests}
+For the published CBMR predictor, let $C_G\in\R^{S\times G}$ contain group
+contrasts and use the full covariance $V_\vartheta$ appropriate to the
+fitting/inference method. Define
+\begin{equation}\label{eq:group-contrast}
+ \mathcal T_{Gj}=[\,C_G\otimes B_j^\top\ \ 0_{S\times R}\,],\qquad
+ \widehat\delta_j=\mathcal T_{Gj}\widehat\vartheta-\delta_{0j},\qquad
+ V_{\delta j}=\mathcal T_{Gj}V_\vartheta\mathcal T_{Gj}^\top.
+\end{equation}
+The reference value $\delta_{0j}$ specifies the null, such as a known
+homogeneous log-intensity or a zero log difference. The statistic
+$\widehat\delta_j^\top V_{\delta j}^{-1}\widehat\delta_j$ restates
+Equation 12 of the article with dimensionally consistent notation.
+For one group, a log-map covariance across voxels is
+$B\,V_{\xi_g\xi_g}B^\top$; the voxel $j$ variance is
+$B_j^\top V_{\xi_g\xi_g}B_j$, with no transpose reversal.
+
+For the log-intensity difference between groups $g$ and $h$,
+\begin{equation}
+ \Var(\widehat\eta_{Bgj}-\widehat\eta_{Bhj})
+ =B_j^\top
+   (V_{\xi_g\xi_g}+V_{\xi_h\xi_h}
+     -V_{\xi_g\xi_h}-V_{\xi_h\xi_g})B_j.
+\end{equation}
+The cross terms from Section~\ref{sec:shared} must be retained.
+No balancing of $M_g$ and $M_h$ is required algebraically; unequal group
+sizes enter the likelihood and its information.
+
+If intensity rather than log-intensity is reported, the Jacobian for
+$\mu_{Bg}=\exp(B\xi_g)$ is
+$\diag(\mu_{Bg})B$. For the vector of group intensities at voxel $j$,
+the delta-method covariance is
+\[
+ V_{\mu,j}\ \approx\
+ \diag(\widehat\mu_{B1j},\ldots,\widehat\mu_{BGj})\,
+ V_{\eta,j}\,
+ \diag(\widehat\mu_{B1j},\ldots,\widehat\mu_{BGj}).
+\]
+Here $V_{\eta,j}=(I_G\otimes B_j^\top)
+V_{\xi_{\mathrm{all}}\xi_{\mathrm{all}}}(I_G\otimes B_j)$.
+The Jacobian identity is exact; the covariance transformation is a
+first-order approximation. Log contrasts avoid that additional approximation.
+For global contrasts, use $C_\gamma\widehat\gamma$ and
+$C_\gamma V_{\gamma\gamma}C_\gamma^\top$, with
+$V_{\gamma\gamma}=\mathcal S^{-1}$ under the observed-information choice,
+not the inverse global diagonal block.
+
+\subsection{Independent-unit sandwich covariance}
+For independent subjects, allowing arbitrary within-subject dependence, let
+$U_i$ be the family-specific score in \eqref{eq:nb-score} and define
+\begin{equation}\label{eq:sandwich}
+ \mathcal A=-\sum_i\frac{\partial U_i}{\partial\beta^\top},\qquad
+ \mathcal J=\sum_i U_iU_i^\top,\qquad
+ V_{\mathrm{robust}}=\mathcal A^{-1}\mathcal J\mathcal A^{-\top}.
+\end{equation}
+For likelihood scores the empirical sensitivity $\mathcal A$ is $H$.
+Under a correctly specified conditional mean, the expected sensitivity is
+$I$ for the independent NB working score, so using $I$ as bread is an
+asymptotically justified alternative. For Poisson they coincide exactly.
+For a general misspecified estimating equation, its own derivative must be
+used; NB Fisher weights combined with unweighted Poisson scores are not
+the matching likelihood sandwich.
+These formulas treat dispersion as fixed. If dispersion is jointly estimated
+and its uncertainty is to be propagated robustly, stack its estimating
+equation with the regression score before forming bread and meat.
+
+The subject-clustered choice of $\mathcal J$ is essential: replacing it by a
+sum of separate voxel score outer products discards within-subject cross terms.
+For a particular contrast one can avoid storing the full meat:
+\begin{equation}
+ \mathcal T_jV_{\mathrm{robust}}\mathcal T_j^\top
+ =\sum_i v_{ij}v_{ij}^\top,\qquad
+ v_{ij}=\mathcal T_j\mathcal A^{-1}U_i.
+\end{equation}
+This follows by distributing the matrix product over the subject sum.
+The independent-cell scores above must not be reused unchanged for the
+aggregated or clustered likelihoods of Section~\ref{sec:extensions}.
+For a grouped penalised fit use its corresponding scores, covariance
+\eqref{eq:penalty-covariance}, and projection $\mathcal T_{Gj}$.
+
+\subsection{Identification and the limits of algebraic improvements}
+In the separable model, if $Bc_B=\mathbf1_N$ and $Zc_Z=\mathbf1_M$,
+then $(\xi,\gamma)\mapsto(\xi+t c_B,\gamma-t c_Z)$ leaves every mean
+unchanged. A constraint or removal of a redundant intercept is therefore
+needed before using \eqref{eq:schur}. Similarly, adding an intercept column
+to a basis that already spans the constant function can create rank
+deficiency. Neither a large sample size nor a well-behaved condition number
+alone establishes valid asymptotic inference; identifiability, independent
+clusters and adequate information in each tested direction are separate
+requirements.
+
+The article reports an empirical threshold of roughly 200 foci per group
+for its parametric-inference experiments. This is not a universal theorem,
+and exact Hessians do not establish a new validity threshold. Removing an
+autodifferentiation intermediate or replacing an SVD changes computational
+cost, not the information in a sparse dataset. Likewise, adding a small
+diagonal term solely to make inversion succeed changes the inferential
+object and is not a silent substitute for a specified penalty.
+
+\subsection{Bootstrap remains a distinct inferential procedure}
+The parametric-bootstrap approach in Section 2.1.4 of the published article
+addresses calibration when its Wald approximation is unreliable. It is not
+made unnecessary by a faster Hessian. A model-consistent bootstrap fits
+the stated null, simulates under its observation/dependence model with the
+original groups and covariates, refits with the same constraints and
+penalty-selection rule, and recomputes the chosen statistic.
+Shared gamma effects must be preserved for clustered NB; a matched
+aggregate-NB sampling law and an independent-cell NB sampling law are not
+interchangeable. This prescription is distinct from a conditional
+spatial-homogeneity randomisation scheme and its assumptions.
+
+Write $B_{\mathrm{boot}}$ for the number of replicates, reserving $B$ for the
+spatial basis. A common nonzero Monte Carlo tail estimate is
+\[
+ \widehat p=\frac{1+\sum_{b=1}^{B_{\mathrm{boot}}}
+       \mathbf1\{T_b^*\geq T_{\mathrm{obs}}\}}{B_{\mathrm{boot}}+1}.
+\]
+The tail and statistic must match the tested alternative. A fitted-null
+parametric bootstrap is not thereby an exact finite-sample test.
+The article's generalised-Pareto tail extrapolation introduces an additional
+approximation that needs its own diagnostics. Neither bootstrap validity,
+tail calibration nor the article's empirical threshold is established by
+the symbolic checks here.
+
+\section{Exact symbolic verification and reproducibility}\label{sec:verification}
+
+The repository runs the four original CBMR proof modules together with
+\texttt{proofs/appendix.py} and \texttt{proofs/published\_cbmr.py}.
+Each claim is an expression difference reduced
+by SymPy; acceptance requires the literal scalar zero or a zero matrix,
+not a numerical tolerance. The generated report from the current run is
+\begin{center}
+\input{generated/verification}
+\end{center}
+
+The original modules check the Poisson and clustered-NB coefficient
+Hessians, the aggregated-NB reparameterisation and derivative components,
+and the structural, spectral and inverse identities. The appendix adds
+the lesion manuscript's independent NB score, observed and expected weights, binary
+likelihood reduction, Poisson limits, coefficient ordering, generic
+affine and separable Hessian assembly, Poisson Kronecker factorisation,
+the distinction between constant and varying covariate effects and its
+constant-function restriction, the NB nonseparability identity, clustered curvature, and projected
+contrast/sandwich identities. The published-CBMR suite checks grouped
+Poisson compression and conditional allocation, the NB matching moments,
+clustered marginal factorisation and curvature, fixed quadratic penalties,
+and shared-global covariance corrections. The generated report counts
+algebraic claims; it is not a count of independently proved statistical
+theorems.
+
+\subsection{Where the published model is improved}
+\begin{center}\small
+\begin{tabularx}{\textwidth}{lTT}
+\toprule
+Published article & Integrated calculation & Boundary of the result\\
+\midrule
+Equations 1--5 & Group design \eqref{eq:group-design} and basis-product assembly &
+Same predictor, no full stacked design allocation\\
+Equation 6 & Both count marginals in \eqref{eq:group-poisson} &
+Voxel totals alone omit the study-allocation score\\
+Equations 7--9 & $\rho_g,A_g$ and \eqref{eq:aggregate-chain} &
+Exact derivatives of a moment-matched likelihood\\
+Equations 10--11 & \eqref{eq:cluster-factorisation} and
+\eqref{eq:cluster-local-information} &
+Exact marginalisation, including within-study dependence\\
+Figure 2, Section 2.1.1 & Fixed penalty gradient, curvature and sandwich &
+Smoothing bias and tuning uncertainty remain separate\\
+Equations 12--14 & Group projections and Schur covariance &
+Shared global effects couple spatial estimates\\
+Section 2.1.4 & Conditioning diagnostics and bootstrap boundaries &
+Faster algebra does not certify sparse-data Wald inference\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{What is and is not machine checked}
+Scalar identities hold for symbolic variables with the stated positivity
+and reality assumptions. Explicit matrix checks use small fixed dimensions
+with arbitrary symbolic entries: the appendix assembly uses
+$M=N=P=R=2$, while the original likelihood checks use three voxels and two
+subjects. Generic scalar functions check the affine chain-rule composition;
+the aggregated-NB components are checked separately rather than simplifying
+its entire composite Hessian in one pass. The original Schur check and the
+appendix Kronecker inverse check use formal matrix symbols of arbitrary
+conformable dimensions under invertibility assumptions.
+
+The published-CBMR suite also uses small grouped and study-level examples
+with symbolic counts and means (and a fixed allocation-score design).
+Its penalty differentiation holds the roughness matrix and smoothing
+weights fixed; the penalised covariance-difference identity is checked
+in the scalar case.
+The dimension-independent arguments are given in the text; fixed-size
+symbolic instances are not proofs over all dimensions. The generated scalar
+formulas and report are tied directly to the checked objects, but the
+handwritten exposition is not mechanically certified. SymPy is a computer
+algebra system, not a proof-assistant kernel. These checks also do not verify
+NiMARE implementation code, floating-point stability, asymptotic
+distributions, model adequacy, or empirical performance.
+
+\subsection{Lean formalisation: a checked subset, not complete coverage}
+The repository also contains a pinned Lean/Mathlib development in
+\texttt{lean_proof_checks/}. It formalises finite-index predictor and stacked-design
+identities, real-variable likelihood derivatives, vector quadratic-penalty
+derivatives, NB algebra and structured covariance identities.
+These proofs are checked by Lean rather than by symbolic
+simplification in SymPy. Many finite-sum and matrix statements use arbitrary
+finite index types instead of fixed matrix sizes.
+
+\textbf{The full appendix has not yet been converted to Lean.}
+The finite affine derivative-to-Hessian assembly, grouped Poisson and
+clustered-NB curvature, and induced-norm spectral identities now have
+formal proofs. The remaining aggregated-NB derivations, probabilistic
+expectation and mixture results, and statistical inference still have
+outstanding proof obligations. The section-by-section inventory is
+\texttt{docs/lean\_coverage.md}. The SymPy table above must not be read as a
+Lean theorem count.
+
+\texttt{make lean} compiles the included proofs and audits their transitive
+axiom dependencies. Admitted proofs and additional axioms are rejected;
+the accepted foundations are \texttt{propext}, \texttt{Classical.choice}
+and \texttt{Quot.sound}. Positivity, differentiability and invertibility
+assumptions remain explicit in theorem statements. Unproved obligations
+are recorded in the inventory, not asserted as axioms.
+
+The equation-level mapping in \texttt{docs/lean\_coverage.json} covers
+all 54 displayed mathematical blocks and additional prose derivations.
+It records the referenced theorems and any missing steps.
+\texttt{make lean-complete} additionally rejects partial or pending
+coverage; a successful \texttt{make lean} alone does not establish completeness.
+The audit output and coverage report are saved in
+\texttt{.lake/lean-audit.log} and
+\texttt{.lake/lean-coverage-report.json}.
+
+\subsection{Rebuilding}
+From the repository root:
+\begin{verbatim}
+pip install -r requirements.txt
+make appendix
+\end{verbatim}
+This verifies all claims, regenerates the LaTeX fragments and compiles
+\texttt{docs/cbmr\_appendix.pdf} twice using \texttt{pdflatex}.
+Any failed claim stops the build. \texttt{make proofs} runs only the
+symbolic checks. CI performs the same checks and rejects stale generated
+fragments; it does not currently build PDFs.
+The editable source is \texttt{docs/cbmr\_appendix.tex}; the reference PDFs
+are left unchanged.
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{References}
+\begin{thebibliography}{9}
+\bibitem{lesion}
+\emph{Scalable Spatial Model for Brain MRI Lesion Mask Data}.
+Supplied working manuscript, \texttt{docs/cbmr\_paper.pdf},
+Sections 2.2--2.4. Source of the principal notation in this appendix.
+
+\bibitem{published}
+Yu, Y., Hill-Bowen, L. D., Riedel, M. C., Bottenhorn, K., Laird, A. R.,
+and Nichols, T. E. (2025).
+\emph{CBMR: Coordinate-based meta-regression for group and covariate inference}.
+Imaging Neuroscience, 3.
+\href{https://doi.org/10.1162/IMAG.a.1057}{doi:10.1162/IMAG.a.1057}.
+Supplied as \texttt{docs/imag.a.1057.pdf}; this appendix adapts the
+mathematics rather than reproducing the article's exposition.
+
+\bibitem{hessian}
+\emph{Closed-Form Observed Information for Coordinate-Based Meta-Regression}.
+Repository derivation note, \texttt{docs/cbmr\_hessian.tex}.
+
+\bibitem{covariance}
+\emph{From the Hessian to the Covariance: Generalising the CBMR standard-error step}.
+Repository derivation note, \texttt{docs/cbmr\_covariance.tex}.
+\end{thebibliography}
+
+\end{document}

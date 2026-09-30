@@ -1,0 +1,257 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{amsmath,booktabs,tabularx,microtype}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,
+  pdftitle={CBMR Implementation Comparisons: Expanded Experiment Findings}}
+\emergencystretch=3em
+\newcolumntype{T}{>{\raggedright\arraybackslash}X}
+\input{generated/explanation_results}
+\title{CBMR Implementation Comparisons\\
+  \large Motivation, comparison setups and expanded findings}
+\author{}
+\date{Updated \today}
+
+\begin{document}
+\maketitle
+\vspace{-1.5em}
+\noindent\textbf{Main finding.}
+Numerical agreement remains strong and the improved aggregated-NB path is more
+stable at extreme parameters. The expanded benchmark does \emph{not} show a
+consistent speed advantage over the original, already closed-form implementation.
+All \ExpandedAttempts{} expanded calibration attempts were rejected by the
+final-score acceptance rule, despite optimiser success flags; consequently
+they provide no estimated coverage or false-positive rates.
+
+\medskip
+\noindent This updates the earlier smoke-only performance and calibration
+summary. Sources are the saved JSON reports in
+\texttt{cbmr-proofs/comparison/results/}; experiments were not rerun to produce
+this document. The source hashes in both expanded reports match the current
+\texttt{cbmr\_code/} and \texttt{cbmr\_improved/} snapshots at generation.
+
+\section{Motivation and comparison setups}
+Exact SymPy identities and Lean proofs do not, by themselves, establish
+floating-point stability, successful optimisation, faster execution or reliable
+statistical inference. The comparison suite addresses these separate questions
+without modifying either implementation directory.
+GC denotes covariate effects constant across voxels; SV allows those effects
+to vary spatially. Covariate values may vary between studies in both designs.
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{0.18\textwidth}T}
+\toprule
+Layer & Setup and purpose\\
+\midrule
+Likelihoods and derivatives &
+Compare objectives, scores and Hessians at identical coefficients and fixed
+dispersion. Independent NumPy/SciPy closed formulas and unsimplified float64
+PyTorch autodiff provide separate implementations; directional finite
+differences provide another check.\\
+Models and designs &
+Poisson, aggregated NB and clustered NB are tested in both source packages.
+Independent-cell NB is reference/helper-only. GC and SV cases include shared
+covariates, unequal groups and varying exposures. Fixed quadratic penalties
+are external wrappers, not native package features.\\
+Covariance &
+Compare block/Schur inversion, shared-global cross-group uncertainty, Kronecker
+structure and projected sandwiches against dense calculations. Include
+positive-definite, indefinite, nearly singular and singular cases.\\
+Stability and fits &
+Exercise zero counts, extreme means, small dispersion and redundant intercepts.
+Identifiable, unpenalised fits use the same starting coefficients and L-BFGS-B
+configuration, with dispersion fixed.\\
+Performance &
+Sequential fresh processes and one numerical thread. Time excludes imports
+and setup. Peak RSS is a whole-process high-water mark, not incremental
+operation memory.\\
+Calibration &
+Simulate each model's own distribution and assess coefficient bias, 95\% Wald
+coverage, null-moderator false positives and failed attempts separately from
+derivative agreement and timing.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\noindent\textbf{Model boundary.}
+Aggregated NB is a moment-matched pattern-total likelihood, not independent-cell
+NB. Its zero-dispersion limit is the \emph{aggregate} Poisson objective.
+Global curvature need not equal full cell-level Poisson because study-allocation
+information is omitted.
+
+\clearpage
+\section{Established numerical agreement and stability}
+\subsection{Regression, covariance and complete fits}
+The saved \texttt{regression.json} records \textbf{512 required comparisons
+with zero failures}, plus 47 diagnostic observations. The standalone covariance
+and fit reports also have zero required failures (46 and 129 comparisons);
+these overlap the full regression report and must not be added to it.
+
+\begin{itemize}
+\item Across 312 derivative comparisons, the largest recorded absolute
+discrepancy was approximately $5.1\times10^{-11}$ and the largest normalised
+Frobenius discrepancy was $3.1\times10^{-12}$.
+\item Covariance algebra agreed closely with dense calculations, with maximum
+absolute discrepancy approximately $1.4\times10^{-14}$. A nearly singular
+example had condition number approximately $6.9\times10^{12}$: small backward
+error does not guarantee accurate inverse entries. A redundant-intercept
+example exposed five identifiable dimensions for six coefficients.
+\item All 28 small implementation/model/design fits reported optimiser success;
+all 100 fit-agreement comparisons passed. The largest final score infinity
+norm was $4.23\times10^{-6}$, below the required $2\times10^{-5}$.
+\end{itemize}
+Most derivative comparisons require elementwise agreement with
+\texttt{rtol=1e-8}, \texttt{atol=1e-10}; finite-difference and fit checks use their
+own stated thresholds. These are finite numerical checks, not additional
+Lean proofs or statistical-calibration results.
+
+\subsection{Aggregated-NB stability}
+At spatial log means $-1000$ and $+1000$, the improved implementation returned
+finite objectives, scores and Hessians, whereas the original implementation
+and unsimplified reference produced nonfinite results.
+At dispersion $10^{-12}$, the improved Hessian approached the correct
+aggregate-Poisson limit with maximum absolute error $9.45\times10^{-11}$,
+versus approximately $0.097$ for the original and $1.34$ for the reference.
+Autodiff is therefore not treated as an infallible floating-point oracle.
+Other difficult regimes are retained as diagnostics, rather than hidden behind
+the zero-failure headline.
+
+\section{Expanded performance experiment}
+\subsection{What changed from the smoke benchmark}
+\texttt{benchmark-expanded.json} adds all three source likelihoods, two workloads
+and three problem sizes, using GC designs and three fresh-process repetitions
+per configuration. All \ExpandedRecords{} implementation/configuration records
+completed successfully: \ExpandedRuns{} measured workers plus 18 separate
+reference workers. The 18 size/model/workload cases are each run with the
+original, improved and unsimplified-autodiff implementations.
+
+\begin{center}\small
+\begin{tabular}{lrrrrr}
+\toprule
+Size & Experiments & Voxels & Bases & Groups & Parameters\\
+\midrule
+Small & 32 & 32 & 4 & 3 & 13\\
+Moderate & 64 & 96 & 8 & 4 & 33\\
+Large & 128 & 256 & 8 & 4 & 33\\
+\bottomrule
+\end{tabular}
+\end{center}
+Small-to-moderate scaling changes both data size and parameter count.
+Moderate-to-large keeps 33 parameters fixed. Even ``large'' is a bounded
+synthetic problem, not a whole-brain production benchmark.
+
+\clearpage
+\subsection{Measured runtimes}
+All entries below are \textbf{median milliseconds across three repetitions}.
+The source implementations already contain closed-form Hessians; this tests
+the additional implementation changes, not merely closed forms versus autodiff.
+The autodiff benchmark uses a row-wise reverse-mode Hessian, not a reproduction
+of production forward-mode memory behaviour.
+
+\paragraph{Hessian assembly.}
+\begin{center}\small
+\ExpandedHessianTable
+\end{center}
+
+\paragraph{Contrast covariance.}
+The same two-row contrast selects a group-intercept difference and a global
+moderator. The original route assembles information and a full covariance;
+the improved route assembles structured information and uses projected solves.
+\begin{center}\small
+\ExpandedContrastTable
+\end{center}
+\noindent$^\dagger$\textbf{Ratio = original median / improved median.}
+Above one means the improved route was faster; below one means it was slower.
+Ratios are descriptive measurements, not statistically established speedups.
+
+\subsection{Interpretation and limitations}
+The improved implementation was faster than the original in
+\textbf{\ExpandedFasterOriginal{} of \ExpandedPairs{} paired cases},
+and faster than the unsimplified-autodiff route in
+\ExpandedFasterAutodiff{} of \ExpandedPairs{} cases.
+There is \textbf{no consistent additional speed advantage over the original}
+in this bounded experiment.
+
+Numerical agreement held throughout: across original and improved benchmark
+outputs, the largest absolute discrepancy was $\ExpandedMaxAbsolute$ and the
+largest normalised Frobenius discrepancy was $\ExpandedMaxRelative$.
+This supports implementation agreement in these cases, independently of
+which method happened to be faster.
+
+The median whole-process RSS ranges were \ExpandedOriginalRSS{} MiB for the
+original and \ExpandedImprovedRSS{} MiB for the improved implementation.
+Interpreter, imports and setup dominate these totals; the results do not
+demonstrate meaningful operation-level or production-scale memory savings.
+
+Only three repetitions were used, without warmup. For example, the improved
+moderate Poisson contrast workload took \ExpandedTimingSpread{} ms in its
+three runs. This substantial variation limits timing conclusions and
+precludes a reliable scaling claim from these measurements alone.
+
+\clearpage
+\section{Expanded calibration: no accepted inference replicates}
+\texttt{calibration-expanded.json} attempted \textbf{100 replicates per model}
+on the large GC design (128 experiments, 256 voxels, eight bases, four groups,
+33 coefficients), for \ExpandedAttempts{} attempts in total.
+Dispersion stayed fixed at its true value; all fits started from zero
+coefficients with the same L-BFGS-B protocol.
+Each model was simulated from its own specified sampling distribution.
+
+\begin{center}\small
+\ExpandedCalibrationTable
+\end{center}
+\noindent Counts are out of 100 attempts per row. Score norm means
+$\|\nabla(-\ell)\|_\infty$. The acceptance rule requires a successful optimiser
+flag, finite results and score norm at most $\ExpandedScoreThreshold$ before
+attempting inference.
+
+\subsection{Why the report says ``completed with failures''}
+All \ExpandedAttempts{} optimisations returned a success flag and terminated
+with the relative-objective-reduction message
+\texttt{REL\_REDUCTION\_OF\_F\_<=\_FACTR*EPSMCH}.
+Nevertheless, \textbf{every final score norm exceeded the separate
+$\ExpandedScoreThreshold$ requirement}. Thus there were
+\ExpandedAcceptedFits{} accepted fits and \ExpandedAcceptedInferences{}
+accepted inference replicates.
+The recorded failure is an \emph{acceptance-criterion failure}, not evidence
+that all optimisers crashed or that all information matrices were singular.
+Inference was not attempted after those rejections.
+
+\textbf{Coverage, false-positive rates and the report's accepted-fit bias
+summaries are unavailable, not zero.}
+Their denominators are zero and the corresponding JSON values are
+\texttt{null}. The run therefore cannot establish either good or poor
+statistical calibration.
+The earlier three-replicate-per-model smoke experiment had 12 accepted fits,
+but was far too small to support calibration claims; it does not override
+the expanded run's acceptance failures.
+
+\subsection{What can be concluded and what remains to do}
+The expanded experiment strengthens the evidence for numerical agreement,
+but does not demonstrate a universal performance gain or validate inferential
+calibration. Before using the calibration experiment substantively, investigate
+why objective-reduction stopping precedes the pre-specified score requirement,
+validate an appropriate fitting/stopping protocol and rerun the simulations.
+Do not silently relax the rule, count rejected fits as successful, or
+interpret missing calibration estimates as zero error rates.
+
+\section{Provenance and reproducibility}
+Individual timings, optimiser diagnostics and rejected attempts remain in the
+saved JSON reports under \texttt{comparison/results/}. Report fingerprints
+(first 16 SHA-256 digits) are:
+\begin{center}\small
+\begin{tabular}{ll}
+\toprule
+Report & Fingerprint\\
+\midrule
+\texttt{benchmark-expanded.json} & \texttt{\ExpandedBenchmarkDigest}\\
+\texttt{calibration-expanded.json} & \texttt{\ExpandedCalibrationDigest}\\
+\bottomrule
+\end{tabular}
+\end{center}
+The editable source is \texttt{docs/explanation.tex}.
+\texttt{make explanation} regenerates its expanded-result tables from the saved
+JSON reports and rebuilds \texttt{explanation.pdf}; it does not rerun experiments.
+The generator checks source snapshots and the assumptions behind this
+interpretation, stopping for review if the experiment outcomes change.
+
+\end{document}

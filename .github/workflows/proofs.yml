@@ -17,3 +17,39 @@ jobs:
       - run: python run_proofs.py
       - name: check the generated fragments are current
         run: git diff --exit-code docs/generated
+
+  numerical:
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-numerical.txt
+      - run: make numerical
+      - name: compare actual floating-point implementations
+        run: make comparison
+      - name: preserve numerical errors and source fingerprints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbmr-numerical-comparison
+          path: comparison/results/regression.json
+          if-no-files-found: warn
+
+  lean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          build: "false"
+          test: "false"
+          lint: "false"
+          use-mathlib-cache: "true"
+      - name: check Lean theorems and axiom dependencies
+        run: make lean

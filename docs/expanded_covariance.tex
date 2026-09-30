@@ -1,0 +1,1252 @@
+% Input fragment: the containing document supplies packages and notation macros.
+\section{Design zeros, information blocks, and what an inverse means}
+\label{cov-structure}
+
+\subsection{Dimensions and the statistical object being inverted}
+\label{cov-dimensions}
+
+Throughout this fragment, there are $M$ studies, $N$ voxels, $P$ spatial
+basis coefficients per map, $G$ groups, $R$ spatially varying (SV)
+covariates, and $Q$ global covariates.  The basis matrix is
+$B\in\R^{N\times P}$, with row $j$ written $B_j^\top$:
+$B_j\in\R^P$ is a column vector.  Likewise $Z_i\in\R^R$ and
+$z_i\in\R^Q$ are column vectors of study covariates.  The coefficient
+vector $\theta$ contains regression coefficients only unless dispersion
+is explicitly added in Section~\ref{cov-dispersion}.
+
+For SV maps, write
+$\beta=(\beta_1^\top,\ldots,\beta_R^\top)^\top\in\R^{RP}$.
+For group maps, use
+$\beta=(\xi_1^\top,\ldots,\xi_G^\top)^\top\in\R^{GP}$.
+Thus the symbol $\beta$ always denotes stacked spatial coefficients,
+but its dimension depends on the specification.  With global coefficients,
+$\theta=(\beta^\top,\gamma^\top)^\top$ and $\gamma\in\R^Q$.
+Let $d=\dim(\beta)$ and $n_\theta=d+Q$; set $Q=0$ when no global
+coefficients are fitted.  Typical affine predictors, with a known offset
+$o_{ij}$, are
+\begin{align}
+ \eta_{ij}
+ &=o_{ij}+(Z_i^\top\otimes B_j^\top)\beta+z_i^\top\gamma
+ &&\text{(SV specification)},\\
+ \eta_{ij}
+ &=o_{ij}+B_j^\top\xi_{g(i)}+z_i^\top\gamma
+ &&\text{(group specification)}.
+\end{align}
+An offset is not an additional estimated coefficient.
+
+Our convention is
+\begin{equation}
+ H(\theta)=-\nabla_\theta^2\ell(\theta),\qquad
+ I(\theta)=\E_\theta\{H(\theta)\}.
+ \label{cov-information-convention}
+\end{equation}
+Here $H$ is \emph{observed} information.  Under a correctly specified
+regular likelihood, interchange of differentiation and integration also
+gives $I=\Var_\theta\{\nabla_\theta\ell\}$.  That information equality
+is a statistical assertion with hypotheses, not a consequence of matrix
+symmetry.  Dispersion $\alpha$ is fixed for now.
+
+Identities below about $H^{-1}$ are exact finite-dimensional algebra when
+the stated inverses exist.  Interpreting $H(\widehat\theta)^{-1}$ or
+$I(\widehat\theta)^{-1}$ as a sampling covariance is generally a
+first-order likelihood approximation, requiring identification, a suitable
+independent-unit asymptotic regime, and an interior regular fit.
+An indefinite observed information matrix may be invertible without its
+inverse being a valid covariance.  These two questions must remain separate.
+
+\subsection{From coefficient support to a graph of SV blocks}
+\label{cov-support-graph}
+
+For an independent-cell log likelihood, put
+$w_{ij}=-\partial^2\ell_{ij}/\partial\eta_{ij}^2$.
+The affine-design chain rule, rather than any particular count family,
+gives the $P\times P$ spatial block
+\begin{equation}
+ H_{rr'}=\sum_{i=1}^M\sum_{j=1}^N
+             w_{ij}Z_{ir}Z_{ir'}B_jB_j^\top .
+ \label{cov-sv-block}
+\end{equation}
+If $Z_{ir}Z_{ir'}=0$ for every study $i$, every summand vanishes,
+irrespective of the numerical weights.  Consequently $H_{rr'}=0$.
+Conversely, a zero block at one parameter value might arise from
+cancellation of nonzero terms.  Such an accidental zero is not a
+design-guaranteed decomposition that can safely be reused at other fits.
+
+Construct a graph with one vertex for each SV covariate column.  Connect
+$r$ and $r'$ whenever at least one study has both $Z_{ir}\ne0$ and
+$Z_{ir'}\ne0$.  If two vertices lie in different connected components,
+there is no such study, and their entire information cross block vanishes.
+If component $a$ has $r_a$ columns, it contributes $d_a=r_aP$
+coefficients.  After permuting coefficients by components,
+\begin{equation}
+ D=\blkdiag(D_1,\ldots,D_{K_{\mathrm{comp}}}),\qquad
+ \sum_{a=1}^{K_{\mathrm{comp}}}d_a=d.
+ \label{cov-component-blocks}
+\end{equation}
+For a group-only spatial design, these are precisely the $G$ group
+blocks, so we write $D=\blkdiag(D_g:g=1,\ldots,G)$.
+For a general SV design, component labels $a$ replace group labels $g$;
+a component need not be a scientific group.
+
+A path is enough to prevent independent inversion.  For example, suppose
+column 1 co-occurs with column 2, and column 2 with column 3, while
+columns 1 and 3 never co-occur.  The information can have the form
+\[
+ \begin{pmatrix} a&b&0\\b&c&e\\0&e&f\end{pmatrix}.
+\]
+When it is nonsingular, its $(1,3)$ inverse entry is
+$be/\det(H)$, which is generally nonzero.  A missing direct edge does
+not imply a zero inverse entry.  Disjoint cell-means indicators separate;
+a common SV intercept or another overlapping column can connect them.
+An all-zero design column instead produces an unidentified direction.
+
+For a likelihood factorized by study but not by voxel, a study contribution
+may couple its voxels.  Nevertheless, it cannot differentiate with respect
+to two spatial columns that are not both present in that study, so the
+same support argument applies when that factorization and predictor support
+hold.  If an aggregate likelihood couples studies or groups, its actual
+factor supports must be inspected instead.  Similarly, a penalty that
+couples components adds edges; design zeros for the likelihood alone
+are not then zeros for the penalized objective.
+
+\subsection{Verification of independent block inversion}
+\label{cov-block-verification}
+
+First suppose there is no global border.  Let $\Pi$ be the permutation
+matrix putting the components in order, and suppose each $D_a$ is
+nonsingular.  Define
+\[
+ W=\Pi^\top\blkdiag(D_1^{-1},\ldots,D_{K_{\mathrm{comp}}}^{-1})\Pi,
+ \qquad H=\Pi^\top D\Pi .
+\]
+Since $\Pi\Pi^\top=I_d$, multiplication gives
+\[
+ HW
+ =\Pi^\top
+   \blkdiag(D_1D_1^{-1},\ldots,D_{K_{\mathrm{comp}}}
+                                  D_{K_{\mathrm{comp}}}^{-1})\Pi
+ =\Pi^\top I_d\Pi=I_d .
+\]
+Multiplying in the reverse order gives $WH=I_d$ as well.  Thus $W=H^{-1}$.
+This is an exact identity, not an approximation obtained by ignoring small
+cross blocks.  It also shows why parameter ordering must accompany a
+collection of blocks: block coordinates and original coefficient
+coordinates need not coincide.
+
+With shared global coefficients, the full information instead has the form
+\begin{equation}
+ H=\begin{pmatrix}D&F\\F^\top&\mathcal E\end{pmatrix},
+ \quad F\in\R^{d\times Q},\quad\mathcal E\in\R^{Q\times Q}.
+ \label{cov-bordered-information}
+\end{equation}
+Here $\mathcal E$ denotes a matrix, not an expectation or an intensity
+total.  Although $D$ has disconnected spatial blocks, paths through the
+global coefficients connect the full system.
+
+\section{Schur elimination and the covariance induced by shared coefficients}
+\label{cov-schur}
+
+\subsection{Deriving a solve one equation at a time}
+\label{cov-schur-solve}
+
+Assume $D$ is nonsingular.  For a right-hand side
+$b=(b_D^\top,b_\gamma^\top)^\top$, write the desired solution as
+$x=(x_D^\top,x_\gamma^\top)^\top$.  The two block equations in $Hx=b$ are
+\begin{align}
+ Dx_D+Fx_\gamma&=b_D, \label{cov-first-block-equation}\\
+ F^\top x_D+\mathcal E x_\gamma&=b_\gamma .
+\end{align}
+Solving the first equation for the spatial part gives
+$x_D=D^{-1}b_D-D^{-1}Fx_\gamma$.  Substitute this expression into
+the second equation:
+\begin{align}
+ F^\top D^{-1}b_D-F^\top D^{-1}Fx_\gamma
+                      +\mathcal E x_\gamma&=b_\gamma,\\
+ (\mathcal E-F^\top D^{-1}F)x_\gamma
+                      &=b_\gamma-F^\top D^{-1}b_D .
+\end{align}
+Define, once for all right-hand sides,
+\begin{equation}
+ T=D^{-1}F,\qquad S=\mathcal E-F^\top T .
+ \label{cov-schur-definitions}
+\end{equation}
+If $S$ is nonsingular, the complete solve is therefore
+\begin{align}
+ y&=D^{-1}b_D,\\
+ x_\gamma&=S^{-1}(b_\gamma-F^\top y),\\
+ x_D&=y-Tx_\gamma .
+ \label{cov-schur-algorithm}
+\end{align}
+The notation $D^{-1}b_D$ means a solve with the factorized blocks of $D$;
+it is not an instruction to construct a dense inverse.  These equations
+also hold for several right-hand sides stored as columns.
+
+\subsection{Full inverse and explicit multiplication check}
+\label{cov-full-inverse}
+
+Expanding the solution in its two right-hand-side components gives
+\[
+ x_D=(D^{-1}+TS^{-1}T^\top)b_D-TS^{-1}b_\gamma,\qquad
+ x_\gamma=-S^{-1}T^\top b_D+S^{-1}b_\gamma .
+\]
+We used symmetry of $D$ to obtain $F^\top D^{-1}=T^\top$.
+Hence
+\begin{equation}
+ H^{-1}=
+ \begin{pmatrix}
+ D^{-1}+TS^{-1}T^\top&-TS^{-1}\\
+ -S^{-1}T^\top&S^{-1}
+ \end{pmatrix}.
+ \label{cov-inverse-formula}
+\end{equation}
+For a direct audit, multiply $H$ by the proposed inverse.  Its four
+blocks simplify separately, using $DT=F$:
+\begin{align}
+ (HH^{-1})_{DD}
+ &=I_d+DTS^{-1}T^\top-FS^{-1}T^\top=I_d,\\
+ (HH^{-1})_{D\gamma}
+ &=-DTS^{-1}+FS^{-1}=0,\\
+ (HH^{-1})_{\gamma D}
+ &=T^\top+(F^\top T-\mathcal E)S^{-1}T^\top
+   =T^\top-SS^{-1}T^\top=0,\\
+ (HH^{-1})_{\gamma\gamma}
+ &=(\mathcal E-F^\top T)S^{-1}=I_Q .
+\end{align}
+The transpose verifies the reverse product because both matrices are
+symmetric.  When $F=0$, the formula reduces to separate inverses of
+$D$ and $\mathcal E$.  When $Q=0$, there is no Schur calculation.
+
+Invertibility of $H$ alone does not guarantee invertibility of $D$.
+For example,
+$\left(\begin{smallmatrix}0&1\\1&0\end{smallmatrix}\right)$
+is nonsingular but its leading scalar block is zero.  The particular
+elimination above is unavailable in that case; a different pivoting
+scheme or full symmetric indefinite factorization is needed.
+
+\subsection{Positive definiteness by completing the square}
+\label{cov-schur-positive}
+
+For arbitrary $u\in\R^d$ and $v\in\R^Q$, expand
+\begin{align}
+ \begin{pmatrix}u\\v\end{pmatrix}^{\!\top}
+ H\begin{pmatrix}u\\v\end{pmatrix}
+ &=u^\top Du+2u^\top Fv+v^\top\mathcal E v\\
+ &=(u+Tv)^\top D(u+Tv)+v^\top Sv .
+ \label{cov-completed-square}
+\end{align}
+Indeed, the cross term is $2u^\top DTv=2u^\top Fv$ and the
+remaining $v$ term is
+$v^\top(T^\top DT+S)v=v^\top\mathcal E v$.
+Thus, if $D\succ0$, then $H\succ0$ if and only if $S\succ0$.
+Necessity follows by choosing $u=-Tv$; sufficiency follows because
+the sum is positive for any nonzero $(u,v)$.  With $D\succ0$,
+the analogous statement $H\succeq0$ if and only if $S\succeq0$
+holds, but a singular $S$ prevents an ordinary inverse.
+
+Equivalently,
+\begin{equation}
+ H=
+ \begin{pmatrix}I_d&0\\T^\top&I_Q\end{pmatrix}
+ \begin{pmatrix}D&0\\0&S\end{pmatrix}
+ \begin{pmatrix}I_d&T\\0&I_Q\end{pmatrix}.
+ \label{cov-congruence}
+\end{equation}
+This is a congruence, not an orthogonal diagonalization.  It determines
+inertia and gives $\det(H)=\det(D)\det(S)$, but it does not say that
+the eigenvalues of $D$ and $S$ are the eigenvalues of $H$.
+
+\subsection{Joint versus fixed-parameter covariance and profile curvature}
+\label{cov-joint-conditional}
+
+Suppose $H\succ0$ and use $V=H^{-1}$ as the local model-based
+covariance approximation.  If $\gamma$ were known rather than estimated,
+the spatial curvature would be $D$ and its covariance approximation
+would be $D^{-1}$.  Joint estimation instead gives
+\begin{equation}
+ V_{\beta\beta}=D^{-1}+TS^{-1}T^\top,\qquad
+ V_{\beta\gamma}=-TS^{-1},\qquad V_{\gamma\gamma}=S^{-1}.
+ \label{cov-joint-blocks}
+\end{equation}
+For any $a\in\R^d$,
+$a^\top TS^{-1}T^\top a=(T^\top a)^\top S^{-1}(T^\top a)\geq0$.
+Thus the extra joint-estimation term is positive semidefinite (PSD).
+This statement is about inverse curvature; it is not a general
+ordering theorem for arbitrary robust covariance estimators.
+
+In a Gaussian approximation with precision $H$, completing the square
+also shows that the conditional covariance of $\beta$ given $\gamma$
+is $D^{-1}$.  This is the precise local meaning of ``conditional'' here;
+it does not assert an exact conditional sampling law for an arbitrary
+finite-sample estimator.  Similarly, $\mathcal E^{-1}$ is the local
+covariance for $\gamma$ if $\beta$ were known.  Joint inference uses
+$S^{-1}$ instead.  Since
+$\mathcal E-S=F^\top D^{-1}F\succeq0$, both matrices being SPD implies
+$S^{-1}\succeq\mathcal E^{-1}$.
+
+The Schur complement also has an optimization interpretation.  Let
+$L=-\ell$, and let $\beta_*(\gamma)$ be a differentiable local minimizer
+in $\beta$, satisfying $L_\beta(\beta_*(\gamma),\gamma)=0$.
+Implicit differentiation gives
+\[
+ D\,\frac{\partial\beta_*}{\partial\gamma^\top}+F=0,
+ \qquad \frac{\partial\beta_*}{\partial\gamma^\top}=-D^{-1}F=-T .
+\]
+For the profile objective $L_{\mathrm{prof}}(\gamma)=
+L(\beta_*(\gamma),\gamma)$, the term involving $L_\beta$ vanishes:
+\[
+ \nabla_\gamma L_{\mathrm{prof}}=L_\gamma,\qquad
+ \nabla_\gamma^2L_{\mathrm{prof}}
+ =\mathcal E+F^\top\frac{\partial\beta_*}{\partial\gamma^\top}
+ =\mathcal E-F^\top D^{-1}F=S .
+\]
+These derivatives are exact along a smooth stationary branch.  Treating
+this branch as a local profile minimum additionally requires appropriate
+curvature; global uniqueness does not follow from the calculation.
+
+\subsection{Cross-group covariance and a hand-computable example}
+\label{cov-example}
+
+For group blocks let $T_g=D_g^{-1}F_g$, so $T$ stacks the $T_g$.
+Equation~\eqref{cov-joint-blocks} gives
+\begin{equation}
+ V_{\xi_g\xi_h}=\mathbf1\{g=h\}D_g^{-1}+T_gS^{-1}T_h^\top .
+ \label{cov-cross-group}
+\end{equation}
+The entire spatial correction $TS^{-1}T^\top$ has rank at most $Q$.
+Each cross-group block has rank at most $Q$ as well, though its entries
+can be positive or negative; an off-diagonal rectangular block is not
+itself a PSD matrix.  A small number of global coefficients therefore
+induces low-rank, not necessarily negligible, dependence among many maps.
+
+Take $G=2$, $P=Q=1$, and choose
+\[
+ D=\begin{pmatrix}2&0\\0&3\end{pmatrix},\qquad
+ F=\begin{pmatrix}1\\1\end{pmatrix},\qquad
+ \mathcal E=2.
+\]
+The arithmetic in the elimination is
+\[
+ T=\begin{pmatrix}1/2\\1/3\end{pmatrix},\quad
+ F^\top T=\frac12+\frac13=\frac56,\quad
+ S=2-\frac56=\frac76,\quad S^{-1}=\frac67.
+\]
+Both $D$ and $S$ are positive definite, so the bordered matrix is SPD.
+The spatial correction is
+\[
+ TS^{-1}T^\top=
+ \frac67\begin{pmatrix}1/4&1/6\\1/6&1/9\end{pmatrix}
+ =\begin{pmatrix}3/14&1/7\\1/7&2/21\end{pmatrix}.
+\]
+Adding $D^{-1}$ and the remaining blocks yields
+\begin{equation}
+ H=\begin{pmatrix}2&0&1\\0&3&1\\1&1&2\end{pmatrix},
+ \qquad
+ H^{-1}=\frac17
+ \begin{pmatrix}5&1&-3\\1&3&-2\\-3&-2&6\end{pmatrix}.
+ \label{cov-numerical-inverse}
+\end{equation}
+For example, the first row of the product is
+$\{2(5,1,-3)+(-3,-2,6)\}/7=(1,0,0)$; the other rows
+are checked in the same way.  Spatial estimates have covariance $1/7$
+despite a zero spatial information cross entry.
+
+For the group difference $c^\top\theta=\xi_1-\xi_2$,
+\[
+ c^\top H^{-1}c=\frac57+\frac37-2\frac17=\frac67.
+\]
+Using the correct marginal variances but discarding their covariance
+would give $8/7$, not $6/7$.  Treating $\gamma$ as known would instead
+give $1/2+1/3=5/6$.  The joint correction for this difference is only
+$(1/2-1/3)^2(6/7)=1/42$, and indeed $5/6+1/42=6/7$.
+This demonstrates both distinctions: joint versus known global effects,
+and joint marginals versus incorrectly independent marginals.  The
+direction of error from dropping cross covariances need not always be
+the same as in this example.
+
+\section{Selected covariance calculations without a full inverse}
+\label{cov-selected}
+
+\subsection{Project by solving for the contrasts}
+\label{cov-projection}
+
+Let $C\in\R^{k\times n_\theta}$ contain $k$ fixed linear contrasts.
+Solving
+\begin{equation}
+ HX=C^\top,\qquad V_C=CX
+ \label{cov-selected-solve}
+\end{equation}
+gives $X=H^{-1}C^\top$ and hence $V_C=CH^{-1}C^\top$.
+Thus only $k$ right-hand sides are needed, rather than $n_\theta$ columns
+of an inverse.  Symmetry gives
+$V_C^\top=(CH^{-1}C^\top)^\top=V_C$ exactly; numerical
+symmetrization can remove roundoff asymmetry but cannot repair a wrong
+model or an indefinite result.
+
+There is a useful reduced formula.  Partition $C=[\,C_D\ C_\gamma\,]$
+conformably with the border.  Multiplication of the four inverse blocks
+gives
+\begin{align}
+ V_C={}&C_DD^{-1}C_D^\top+C_DTS^{-1}T^\top C_D^\top\\
+ &-C_DTS^{-1}C_\gamma^\top
+       -C_\gamma S^{-1}T^\top C_D^\top
+       +C_\gamma S^{-1}C_\gamma^\top\\
+ ={}&C_DD^{-1}C_D^\top+
+       (C_\gamma-C_DT)S^{-1}(C_\gamma-C_DT)^\top .
+ \label{cov-reduced-contrast}
+\end{align}
+For a spatial-only contrast, its uncertainty from the global fit vanishes
+exactly when $C_DT=0$ (assuming $S\succ0$).  For a contrast involving
+both kinds of coefficients, cancellation instead concerns
+$C_\gamma-C_DT$.  These statements follow from the positive definite
+quadratic form and are not an assumption of group independence.
+
+Computationally, solve $DY=C_D^\top$, form
+$A_C=C_\gamma-C_DT$, and solve $SW=A_C^\top$.  Then compute
+$C_DY+A_CW$.  Neither $D^{-1}$ nor $S^{-1}$ must be stored as a
+matrix.  The same projection principle works with an expected information
+matrix or a specified penalized curvature, but that substitution changes
+which covariance interpretation is being used.
+
+\subsection{Diagonal entries and contrasts in batches}
+\label{cov-diagonal}
+
+Let $e_a$ denote a coordinate vector and $t_a=T^\top e_a\in\R^Q$.
+For a spatial coordinate in block $g$,
+\begin{equation}
+ (H^{-1})_{aa}=(D_g^{-1})_{aa}+t_a^\top S^{-1}t_a .
+ \label{cov-diagonal-entry}
+\end{equation}
+The first term means the corresponding local coordinate in $D_g$.
+To compute the second terms together, solve $SW=T^\top$;
+the $a$th correction is the inner product of row $a$ of $T$
+with column $a$ of $W$.  Global diagonal entries are the diagonal
+of $S^{-1}$, obtained from solves against its coordinate vectors.
+
+Even obtaining every diagonal entry of a dense block inverse may require
+many triangular solves.  The benefit is that the full $d\times d$
+spatial covariance is never formed.  If just a few coordinates are
+required, solve only for their coordinate vectors.  If many voxel
+contrasts are needed, process a manageable batch of contrast rows and
+retain the resulting variances or small covariance blocks.  An
+$N\times N$ covariance of all voxels should be formed only if it is
+actually the requested output.
+
+\section{Independent-unit sandwich covariance and its normalization}
+\label{cov-sandwich}
+
+\subsection{Taylor expansion of an unnormalized score equation}
+\label{cov-sandwich-taylor}
+
+Let $U_i(\theta)\in\R^{n_\theta}$ be the contribution of independent
+study $i$ to an estimating equation, and let
+$U(\theta)=\sum_{i=1}^M U_i(\theta)$.  At the target $\theta_0$ assume
+$\E\{U(\theta_0)\}=0$; common likelihood and conditional-mean setups
+also have $\E\{U_i(\theta_0)\}=0$ separately.  Define
+\[
+ A(\theta)=-\frac{\partial U(\theta)}{\partial\theta^\top}
+          =-\sum_i\frac{\partial U_i(\theta)}{\partial\theta^\top}.
+\]
+Expanding $U(\widehat\theta)=0$ about $\theta_0$ gives
+\begin{align}
+ 0&=U(\theta_0)-A(\theta_0)(\widehat\theta-\theta_0)
+                      +\text{higher-order remainder},\\
+ \widehat\theta-\theta_0
+ &\approx A(\theta_0)^{-1}\sum_iU_i(\theta_0).
+ \label{cov-taylor-linearization}
+\end{align}
+This linearization requires a negligible remainder in the chosen
+asymptotic regime and a nonsingular limiting sensitivity.  Independence
+between studies gives
+\[
+ \Var\Bigl\{\sum_iU_i(\theta_0)\Bigr\}
+ =\sum_i\Var\{U_i(\theta_0)\}=J_0 .
+ \]
+With appropriate laws of large numbers, a customary empirical replacement
+is $\widehat J=\sum_iU_i(\widehat\theta)U_i(\widehat\theta)^\top$,
+leading to
+\begin{equation}
+ \widehat V_{\mathrm{robust}}
+ =\widehat A^{-1}\widehat J\,\widehat A^{-\top}.
+ \label{cov-sandwich-estimator}
+\end{equation}
+Here $A^{-\top}=(A^{-1})^\top$.  Likelihood scores give $A=H$;
+general estimating equations need not give a symmetric $A$.
+Consistency of the uncentered meat requires the relevant moment
+conditions.  In particular, systematic nonzero individual score means
+under a misspecified fixed design cannot simply be identified with
+within-study sampling variances.
+
+There is \emph{no additional factor $1/M$} in
+Equation~\eqref{cov-sandwich-estimator}: its bread and meat are both
+unnormalized sums.  To check, write
+$\bar A=\widehat A/M$ and $\bar J=\widehat J/M$.  Then
+\[
+ \frac1M\bar A^{-1}\bar J\bar A^{-\top}
+ =\frac1M(M\widehat A^{-1})(\widehat J/M)
+                     (M\widehat A^{-\top})
+ =\widehat A^{-1}\widehat J\widehat A^{-\top}.
+\]
+Mixing an averaged bread with an unscaled summed meat introduces
+spurious powers of $M$.
+
+\subsection{Why the clustering unit matters}
+\label{cov-study-clustering}
+
+Suppose a working likelihood is cell additive and
+$U_i=\sum_{j=1}^N u_{ij}$.  Expanding its outer product shows exactly
+what study clustering retains:
+\begin{align}
+ U_iU_i^\top
+ &=\Bigl(\sum_j u_{ij}\Bigr)\Bigl(\sum_lu_{il}\Bigr)^\top\\
+ &=\sum_j u_{ij}u_{ij}^\top
+       +\sum_{j\ne l}u_{ij}u_{il}^\top .
+ \label{cov-cluster-cross-terms}
+\end{align}
+A cellwise meat retains only the first sum.  A study-clustered meat
+retains both, allowing dependence among voxels within a study.  It still
+requires independent studies, or a justified asymptotic replacement for
+that assumption.  If experiments share participants or another sampling
+unit, the independence unit may be larger than an experiment and the
+scores must be grouped accordingly.
+
+More voxels within a fixed small number of studies do not automatically
+provide the independent replication required by cluster asymptotics.
+Finite-sample adjustments also do not create that replication.  For
+example, multiplying $\widehat J$ by $M/(M-n_\theta)$ is a particular
+HC1 convention, defined only for $M>n_\theta$; it is not a universal
+small-cluster validity theorem.
+
+\subsection{Family-specific scores cannot be interchanged}
+\label{cov-family-scores}
+
+Write $x_{ij}=\nabla_\theta\eta_{ij}$ as a column vector.  For the
+Poisson working likelihood its study score is
+\[
+ U_i^{\mathrm P}=\sum_jx_{ij}(y_{ij}-\mu_{ij}).
+\]
+For independent-cell NB2 with fixed dispersion $\alpha$, the corresponding
+score is instead
+\[
+ U_i^{\mathrm{NB}}=\sum_jx_{ij}
+                  \frac{y_{ij}-\mu_{ij}}{1+\alpha\mu_{ij}} .
+\]
+These formulas state the score inputs; the count-likelihood derivative
+derivations belong to the likelihood chapters.  The NB denominators
+change both the estimating equation and its derivative.  Combining
+Poisson residual scores with NB likelihood information is not the
+matching likelihood sandwich.  Under a correctly specified conditional
+mean, the expected derivative of this independent-NB working score
+has the usual NB Fisher weights, even if the working variance is wrong;
+using those expected weights as bread then needs its own consistency
+argument.  Observed NB information and expected Fisher information do
+not in general agree at a realized dataset.
+
+For the SV predictor the Poisson spatial and global score pieces are
+explicitly
+\[
+ U_{i,\beta}^{\mathrm P}
+    =Z_i\otimes\left\{\sum_jB_j(y_{ij}-\mu_{ij})\right\},
+ \qquad
+ U_{i,\gamma}^{\mathrm P}
+    =z_i\sum_j(y_{ij}-\mu_{ij}).
+\]
+Thus scores can be assembled by projecting residuals onto the basis,
+without constructing every full design row.
+
+A study-level clustered-NB likelihood obtained by integrating a shared
+study effect has score $U_i=\nabla_\theta\ell_i$, including that
+integration-induced dependence; it is not an independent-cell NB score.
+An aggregate-NB likelihood for group-by-voxel totals is more problematic
+for study clustering: its objective need not be a sum of original-study
+log likelihoods at all.  A matched shape parameter can depend on several
+studies' means simultaneously.  Arbitrarily allocating an aggregate
+score back to studies does not supply independent score contributions,
+even if the allocated vectors sum to the total score.  A valid sandwich
+must follow an actual independent-unit estimating representation or a
+justified joint sampling model for the aggregates.  Alternatively, a
+bootstrap can refit the aggregate procedure to appropriately resampled
+original independent units when those data and assumptions are available.
+
+In \texttt{cbmr\_improved/covariance.py}, the implemented likelihood-score
+sandwich explicitly requires Poisson and rejects the NB families.
+Its study-score path uses basis projections of counts and fitted means.
+The matrix machinery in \texttt{structured.py} can accept other supplied
+scores, but cannot certify that the caller's scores represent the fitted
+likelihood or the correct independence units.
+
+\subsection{Projected Gram computation and rank limits}
+\label{cov-sandwich-gram}
+
+Let $\mathsf U\in\R^{M\times n_\theta}$ have row $i$ equal to
+$U_i^\top$, so $\widehat J=\mathsf U^\top\mathsf U$.
+For symmetric bread $H$ and a contrast matrix $C$, solve
+$HX=C^\top$ and put $\mathsf V=\mathsf U X$.  Then
+\begin{align}
+ \mathsf V^\top\mathsf V
+ &=X^\top\mathsf U^\top\mathsf U X\\
+ &=CH^{-1}\widehat JH^{-1}C^\top
+ =C\widehat V_{\mathrm{robust}}C^\top .
+ \label{cov-projected-gram}
+\end{align}
+Equivalently, accumulate outer products
+$v_iv_i^\top$ with $v_i=CH^{-1}U_i$.
+For a nonsymmetric bread, the correct projected solve is
+$A^\top X=C^\top$, not $AX=C^\top$.
+This distinction disappears for the symmetric observed information.
+
+The Gram representation proves PSD of the sandwich even if an
+invertible bread is indefinite.  It does not make such a bread a valid
+likelihood covariance or prove consistency of the estimator.  It also
+shows
+\[
+ \operatorname{rank}(\widehat V_{\mathrm{robust}})
+ \leq\min(M,n_\theta),\qquad
+ \operatorname{rank}(C\widehat V_{\mathrm{robust}}C^\top)
+ \leq\min(M,n_\theta,k).
+\]
+At an exactly solved unpenalized score equation,
+$\mathsf U^\top\mathbf1_M=\sum_iU_i=0$, which tightens the first
+bound to $\min(M-1,n_\theta)$ and similarly for the projected matrix.
+Explicitly centering score rows also imposes this dependence.
+At a penalized optimum the unpenalized score sum is generally nonzero,
+so the $M-1$ argument does not automatically apply.  Multiplying a
+Gram matrix by a positive correction factor cannot increase its rank.
+
+\section{Quadratic roughness penalties and the meaning of penalized uncertainty}
+\label{cov-penalties}
+
+\subsection{Deriving the gradient and Hessian from the quadratic form}
+\label{cov-penalty-derivatives}
+
+Let $J_B=J_B^\top\succeq0$ be a fixed $P\times P$ roughness matrix
+and let $\lambda_g\geq0$ be fixed smoothing parameters.  For group maps
+use the explicit convention
+\begin{equation}
+ \mathcal P(\theta)=\frac12\sum_{g=1}^G
+                         \lambda_g\xi_g^\top J_B\xi_g
+                   =\frac12\theta^\top K\theta,\quad
+ K=\blkdiag(\lambda_1J_B,\ldots,\lambda_GJ_B,0_{Q\times Q}).
+ \label{cov-penalty-definition}
+\end{equation}
+For SV maps, replace the group blocks by
+$\lambda_rJ_B$, $r=1,\ldots,R$.  The construction of $J_B$ depends
+on the specified roughness operator and basis; it is not determined by
+the word ``smoothing'' alone.
+
+For one coefficient vector $\xi$, expand
+$\xi^\top J_B\xi=\sum_{a,b}\xi_a(J_B)_{ab}\xi_b$.
+Differentiation with respect to $\xi_c$ gives
+\begin{align}
+ \frac{\partial}{\partial\xi_c}
+       \left(\frac{\lambda}{2}\xi^\top J_B\xi\right)
+ &=\frac{\lambda}{2}
+       \left\{\sum_b(J_B)_{cb}\xi_b+\sum_a\xi_a(J_B)_{ac}\right\}\\
+ &=\lambda(J_B\xi)_c .
+\end{align}
+Differentiating again gives
+$\partial^2\mathcal P/\partial\xi_c\partial\xi_e
+=\lambda(J_B)_{ce}$.  Equivalently, the differential is
+$d\mathcal P=(K\theta)^\top d\theta$ and its second differential
+is $d\theta^\top K\,d\theta$.  A nonsymmetric supplied matrix would
+contribute its symmetric part; the convention here assumes symmetry.
+
+For the minimized objective $L_{\mathrm{pen}}=-\ell+\mathcal P$,
+\begin{equation}
+ \nabla L_{\mathrm{pen}}=-U+K\theta,\qquad
+ H_{\mathrm{pen}}=H+K,\qquad U(\widehat\theta)=K\widehat\theta .
+ \label{cov-penalized-equation}
+\end{equation}
+Omitting the factor $1/2$ in the penalty doubles both derivatives at the
+same numerical $\lambda_g$.  Fixed separate-map penalties preserve
+the likelihood's spatial component zeros and global border.  A
+between-map penalty need not preserve them.
+
+\subsection{Frequentist linearization, bias, and posterior curvature}
+\label{cov-penalty-uncertainty}
+
+Let $\theta_0$ be the unpenalized population target.  Expanding the
+penalized score equation about that target gives
+\begin{align}
+ 0&\approx U(\theta_0)-H(\theta_0)(\widehat\theta-\theta_0)
+                   -K\theta_0-K(\widehat\theta-\theta_0),\\
+ (H+K)(\widehat\theta-\theta_0)&\approx U(\theta_0)-K\theta_0 .
+ \label{cov-penalty-linearization}
+\end{align}
+Replacing the random sensitivity by its suitable population counterpart
+$A_0$ identifies both pieces:
+\[
+ \E(\widehat\theta-\theta_0)
+       \approx-(A_0+K)^{-1}K\theta_0,\qquad
+ \Var(\widehat\theta)\approx
+       (A_0+K)^{-1}J_0(A_0+K)^{-\top}.
+\]
+The first expression describes local smoothing bias.  When the penalty
+does not become negligible, a population penalized target can differ
+substantially from $\theta_0$, and linearization should instead be
+performed at that target.  The displayed local bias is not a globally
+exact formula for a nonlinear count regression.
+
+A plug-in penalized sandwich uses $H+K$ as bread and an appropriate
+estimate of the variability of the \emph{data} score as meat.  The
+deterministic penalty is not an independent random contribution and
+must not be added to every study's score.  Under strong shrinkage,
+data-score outer products may also require attention to centering and
+the definition of the penalized population target; an uncentered meat
+is not universally consistent when individual score means are nonzero.
+Under a correctly specified likelihood, the local expected-curvature
+version is $(I+K)^{-1}I(I+K)^{-1}$.
+
+By contrast, a Gaussian prior with precision $K$ gives negative
+log-posterior curvature $H+K$.  A Laplace posterior approximation uses
+$(H+K)^{-1}$.  It is exactly the posterior covariance only for an
+actually quadratic posterior with appropriate support.  A singular
+roughness precision corresponds to unpenalized directions and need
+not define a proper prior on its own.
+
+The expected-curvature versions differ by the exact identity
+\begin{align}
+ (I+K)^{-1}-(I+K)^{-1}I(I+K)^{-1}
+ &=(I+K)^{-1}\{(I+K)-I\}(I+K)^{-1}\\
+ &=(I+K)^{-1}K(I+K)^{-1}\succeq0,
+ \label{cov-penalty-covariance-gap}
+\end{align}
+assuming $I+K\succ0$ and $K\succeq0$.
+For a one-dimensional quadratic example with information $a>0$ and
+penalty $k\geq0$, inverse curvature is $1/(a+k)$, whereas the
+sampling variance is $a/(a+k)^2$ and the local bias is
+$-k\theta_0/(a+k)$.  Neither variance includes the squared bias
+needed for mean squared error about $\theta_0$.
+
+\subsection{Selected smoothing parameters, null spaces, and numerical ridge}
+\label{cov-penalty-selection}
+
+All previous penalty derivatives hold $\lambda$ fixed.  If $\lambda$
+is selected from the same data, uncertainty in $\widehat\lambda$
+and its dependence on the regression estimate are omitted by a
+fixed-$\lambda$ calculation.  For a smooth solution branch,
+differentiating $U(\widehat\theta)-K(\lambda)\widehat\theta=0$
+gives
+\[
+ (H+K)\frac{\partial\widehat\theta}{\partial\lambda_a}
+       =-\frac{\partial K}{\partial\lambda_a}\widehat\theta .
+\]
+A joint delta calculation must include the variability of
+$\widehat\lambda$ and the cross covariances with the fixed-smoothing
+fit, not merely append an independent variance term.  A bootstrap
+that repeats the selection rule is another possible route under its
+own assumptions.
+
+When $H\succeq0$ and $K\succeq0$,
+\[
+ v^\top(H+K)v=0
+ \quad\Longleftrightarrow\quad v\in\ker(H)\cap\ker(K).
+\]
+The implication uses the nonnegativity of both terms and the spectral
+characterization of the null space of a PSD matrix.  Thus
+$H+K\succ0$ precisely when their null spaces have no common nonzero
+direction.  A roughness penalty that leaves constant maps unpenalized
+cannot resolve a likelihood confounding direction that is also constant.
+For an indefinite $H$, this PSD null-space argument does not apply.
+
+For example, if $Bc_B=\mathbf1_N$ and $z_i^\top c_\gamma=1$
+for every study, then shifting every group map by $tc_B$ and
+shifting $\gamma$ by $-tc_\gamma$ leaves the predictor unchanged.
+Likelihood identification requires a constraint or removal of the
+redundant direction.  Penalizing that direction can select a unique
+answer, but it introduces additional assumptions rather than new data
+information.
+
+Adding a numerical ridge $\varepsilon I_{n_\theta}$ solely during
+covariance calculation changes the inverse being reported without
+changing the estimating equation that produced the fit.  It is not
+automatically a fitted penalty or a sampling covariance for that fit.
+The repository's \texttt{ridge} option is explicitly numerical
+regularization.  Its magnitude and inferential effect should be
+reported rather than described as magical identification.
+
+\section{Joint nuisance dispersion and reparameterization}
+\label{cov-dispersion}
+
+\subsection{Regression uncertainty after estimating dispersion}
+\label{cov-nuisance-schur}
+
+Now let $\alpha\in(0,\infty)^L$ collect dispersion parameters; $L=1$ is
+allowed.  Use a distinct joint information matrix
+\[
+ \mathcal H=
+ \begin{pmatrix}
+ H_{\theta\theta}&H_{\theta\alpha}\\
+ H_{\alpha\theta}&H_{\alpha\alpha}
+ \end{pmatrix}.
+\]
+Here $H_{\theta\theta}$ is the regression curvature with dispersion held
+fixed at its evaluation value, not the inverse-covariance block of a
+joint fit.  If the nuisance block is nonsingular, eliminate the
+nuisance variables to define
+\begin{equation}
+ H_{\mathrm{eff}}=
+ H_{\theta\theta}
+   -H_{\theta\alpha}H_{\alpha\alpha}^{-1}H_{\alpha\theta},
+ \qquad
+ (\mathcal H^{-1})_{\theta\theta}=H_{\mathrm{eff}}^{-1}.
+ \label{cov-nuisance-adjustment}
+\end{equation}
+This is the same Schur identity with the roles of the block variables
+reordered.  If $\mathcal H\succ0$, the subtraction is PSD and
+$H_{\mathrm{eff}}^{-1}\succeq H_{\theta\theta}^{-1}$.
+For one nuisance parameter with cross column $h$ and scalar
+curvature $a>0$, the effective information is
+$H_{\theta\theta}-hh^\top/a$.  A small nuisance dimension does not
+guarantee a small adjustment.
+
+Expected information may have zero regression--dispersion cross blocks
+for some parametrizations and models.  That must be established for
+the particular likelihood; it cannot be inferred from alternating
+optimization, and it does not force the observed cross block to be
+zero.  For robust inference, stack the regression and dispersion
+estimating equations, form their joint bread and joint score meat,
+and then project the full sandwich onto regression coordinates.
+Replacing a regression bread by a Schur complement alone while
+ignoring nuisance-score variation is not a general robust adjustment.
+
+The regression information and covariance interfaces discussed here in
+\texttt{cbmr\_improved} hold the fitted dispersion fixed.  They do
+not supply the joint nuisance adjustment in
+Equation~\eqref{cov-nuisance-adjustment}.  A likelihood fit that updates
+dispersion is not, by that fact alone, accompanied by joint-dispersion
+standard errors.
+
+\subsection{Log dispersion and the extra Hessian term}
+\label{cov-log-dispersion}
+
+For positive dispersions write $\delta_a=\log\alpha_a$, so
+$\alpha_a=e^{\delta_a}$, and put $A_\alpha=\diag(\alpha)$.
+Let $U_\alpha=\nabla_\alpha\ell$ at the evaluation point.  The
+first derivative transforms as
+$U_\delta=A_\alpha U_\alpha$.  Differentiating its $a$th component
+with respect to $\delta_b$ gives
+\[
+ \frac{\partial (U_\delta)_a}{\partial\delta_b}
+ =\mathbf1\{a=b\}\alpha_a(U_\alpha)_a
+   +\alpha_a\alpha_b
+      \frac{\partial^2\ell}{\partial\alpha_a\partial\alpha_b}.
+\]
+Changing sign to information therefore yields
+\begin{equation}
+ H_{\delta\delta}
+   =A_\alpha H_{\alpha\alpha}A_\alpha
+            -\diag\bigl(\alpha_a(U_\alpha)_a:a=1,\ldots,L\bigr),
+ \qquad H_{\theta\delta}=H_{\theta\alpha}A_\alpha .
+ \label{cov-log-hessian}
+\end{equation}
+For a scalar this reads
+$H_{\delta\delta}=\alpha^2H_{\alpha\alpha}-\alpha U_\alpha$.
+The minus sign of the extra score term follows from the convention
+$H=-\nabla^2\ell$.
+
+At an interior joint stationary point $U_\alpha=0$, the extra term
+vanishes and, with
+$J_{\mathrm{par}}=\blkdiag(I_{n_\theta},A_\alpha)$,
+the joint observed information transforms by
+$\mathcal H_{(\theta,\delta)}
+=J_{\mathrm{par}}^\top\mathcal H_{(\theta,\alpha)}J_{\mathrm{par}}$.
+Expected information obeys the corresponding rule under zero expected
+score and regularity.  Away from stationarity, simply applying this
+congruence to an observed Hessian drops a real chain-rule term.
+At a penalized optimum the likelihood score alone may be nonzero:
+transform the full objective and its gradient if that is the curvature
+being used.  Finally, $\alpha=0$ is a boundary not represented by
+finite $\delta$; interior Wald arguments do not automatically cover it.
+
+\section{Voxel contrasts, nonlinear maps, and inferential calibration}
+\label{cov-inference}
+
+\subsection{SV coefficient ordering and tensor-product contrasts}
+\label{cov-sv-contrasts}
+
+Let $C_Z\in\R^{k\times R}$ specify contrasts among SV maps.
+At voxel $j$, stacking the $R$ log effects gives
+\[
+ \begin{pmatrix}B_j^\top\beta_1\\ \vdots\\B_j^\top\beta_R\end{pmatrix}
+ =(I_R\otimes B_j^\top)\beta .
+\]
+Multiplication by $C_Z$ and the Kronecker mixed-product identity give
+\begin{equation}
+ \widehat\delta_j
+   =(C_Z\otimes B_j^\top)\widehat\beta-\delta_{0j},\qquad
+ V_{\delta j}
+   =(C_Z\otimes B_j^\top)V_{\beta\beta}
+                    (C_Z^\top\otimes B_j).
+ \label{cov-sv-contrast-formula}
+\end{equation}
+The contrast matrix is $k\times RP$, not $RP\times k$.
+If global coefficients are present, append $k\times Q$ zeros to
+obtain a contrast on $\theta$.  For example, a row with entries
+$(1,-1,0,\ldots,0)$ produces the coefficient row
+$[\,B_j^\top,-B_j^\top,0,\ldots,0\,]$.
+This explicitly checks that the stacking convention agrees with the
+tensor-product order.  Contrast row sums need not equal one; differences
+usually sum to zero.
+
+\subsection{GC group differences and global tests}
+\label{cov-gc-contrasts}
+
+With $C_G\in\R^{k\times G}$, use
+$\mathcal T_{Gj}=[\,C_G\otimes B_j^\top\ \ 0_{k\times Q}\,]$.
+Then $\widehat\delta_j=\mathcal T_{Gj}\widehat\theta-\delta_{0j}$
+and $V_{\delta j}=\mathcal T_{Gj}V\mathcal T_{Gj}^\top$,
+where $V$ must be the covariance choice appropriate to the estimator.
+For one difference $\xi_g-\xi_h$, expansion gives
+\begin{align}
+ \Var\{B_j^\top(\widehat\xi_g-\widehat\xi_h)\}
+ &=B_j^\top(V_{gg}+V_{hh}-V_{gh}-V_{hg})B_j\\
+ &=B_j^\top(D_g^{-1}+D_h^{-1})B_j\\
+ &\quad+B_j^\top(T_g-T_h)S^{-1}(T_g-T_h)^\top B_j,
+ \label{cov-gc-difference}
+\end{align}
+where the last two lines assume the observed inverse-curvature choice
+and $g\ne h$.  This expression retains shared-global uncertainty and
+shows when it cancels from a difference.  Unequal study numbers
+per group affect the information but do not invalidate the identity.
+
+A global contrast $C_\gamma\gamma$ has local model-based covariance
+$C_\gamma S^{-1}C_\gamma^\top$, not
+$C_\gamma\mathcal E^{-1}C_\gamma^\top$.  A comparison of fitted
+intensities at different global covariate values must include the
+appropriate nonzero global contrast as well; it is not necessarily a
+pure group-map contrast.
+
+\subsection{Exponentiation and normalized intensities by the delta method}
+\label{cov-delta}
+
+For one map let $\eta=B\xi$ and $\mu=\exp(\eta)$ componentwise.
+Since $\partial\mu_j/\partial\xi^\top=\mu_jB_j^\top$,
+the exact Jacobian is $J_\mu=\diag(\mu)B$.  The first-order expansion
+\[
+ \mu(\widehat\xi)-\mu(\xi_0)
+       \approx J_\mu(\xi_0)(\widehat\xi-\xi_0)
+\]
+leads to
+$\widehat{\Cov}\{\mu(\widehat\xi)\}
+\approx J_\mu(\widehat\xi)V_{\xi\xi}J_\mu(\widehat\xi)^\top$.
+The Jacobian is exact, whereas the covariance approximation is not.
+For a scalar log contrast $\delta$, the ratio $r=e^\delta$ has
+approximate variance $r^2\Var(\widehat\delta)$.  Exponentiating a
+log-scale interval often respects positivity better than a symmetric
+interval on the ratio scale.
+
+For normalized spatial intensity define
+$p_j=\mu_j/m_\mu$, where $m_\mu=\sum_l\mu_l$.
+The quotient rule gives the entire normalization derivative:
+\begin{align}
+ dp_j
+ &=\frac{m_\mu\,d\mu_j-\mu_j\sum_l d\mu_l}{m_\mu^2}\\
+ &=p_j\left(d\eta_j-\sum_lp_l\,d\eta_l\right),\\
+ J_p&=\{\diag(p)-pp^\top\}B .
+ \label{cov-normalized-jacobian}
+\end{align}
+Thus $\Cov\{p(\widehat\xi)\}\approx J_pV_{\xi\xi}J_p^\top$.
+Because $\mathbf1_N^\top J_p=0$, this covariance is singular in the
+sum-to-one direction and has rank at most $\min(P,N-1)$.
+A common multiplicative global intensity factor cancels from this
+within-map normalization exactly.  This does not mean global
+estimation has no indirect effect on the covariance of the fitted
+spatial coefficients.  Covariances between normalized group maps
+still require $J_{p,g}V_{gh}J_{p,h}^\top$.
+
+\subsection{Wald tests: algebra versus the limiting null law}
+\label{cov-wald}
+
+For a $k$-dimensional contrast with nonsingular estimated covariance,
+the Wald statistic is computed by solving $V_{\delta j}a=\widehat\delta_j$
+and taking
+\[
+ W_j=\widehat\delta_j^\top a
+     =\widehat\delta_j^\top V_{\delta j}^{-1}\widehat\delta_j .
+\]
+If the null is true, the estimator is asymptotically normal in the
+tested directions, the covariance estimate is consistent, and the
+$k$ constraints are independent, then $W_j$ converges in distribution
+to $\chi_k^2$.  For one contrast the signed statistic is
+$Z_j=\widehat\delta_j/\sqrt{V_{\delta j}}$, with $W_j=Z_j^2$.
+These distributional statements are not exact consequences of Schur
+inversion.
+
+Redundant constraints should be reduced to an independent set.
+A generalized inverse can describe a known lower-dimensional
+estimable test under additional rank conditions, but cannot rescue
+unidentified contrasts, too few independent clusters, or an unstable
+covariance.  Smoothing bias, estimated nuisance parameters, boundary
+fits, and data-dependent model selection all require attention.
+Pointwise voxel $p$-values are not automatically multiplicity-adjusted
+or simultaneous spatial inference.  Faster exact linear algebra does
+not establish a universal minimum number of foci or studies for Wald
+calibration.
+
+\subsection{Bootstrap units, null fitting, and repeated fitting decisions}
+\label{cov-bootstrap}
+
+A bootstrap must reproduce the estimator and the relevant sampling
+mechanism.  For a nonparametric study bootstrap, resample independent
+studies (or larger independent clusters), retaining each selected
+unit's entire voxel pattern and covariates.  Group-stratified resampling
+may be appropriate when the design conditions on group counts.
+Resampling individual voxels instead changes the within-study dependence
+model.  A fixed-design parametric bootstrap instead keeps covariates
+and group membership fixed and simulates new responses.
+
+For a fitted-null parametric test, the operational sequence is:
+fit the stated null with its constraints; simulate under that null
+and its dependence model; refit each simulated dataset by the original
+procedure; and recompute the same statistic.  If the procedure estimates
+dispersion or selects smoothing parameters, repeat those steps unless
+the explicit target is conditional on their fixed values.  A shared
+study latent effect must be shared across that study's simulated voxels.
+Independent-cell NB and aggregate-NB sampling schemes are not
+interchangeable with a study-clustered NB scheme.
+
+With $B_{\mathrm{boot}}$ successful replicates, a common nonzero
+Monte Carlo tail estimate is
+\[
+ \widehat p=
+ \frac{1+\sum_{b=1}^{B_{\mathrm{boot}}}
+                     \mathbf1\{W_b^*\geq W_{\mathrm{obs}}\}}
+      {B_{\mathrm{boot}}+1}.
+\]
+The statistic and tail must match the alternative, and failed refits
+must be diagnosed rather than silently discarded as if random.
+The $+1$ convention does not make a fitted-null parametric bootstrap
+an exact finite-sample test.  Bootstrap validity and any tail
+extrapolation remain separate statistical questions.
+
+\section{Conditioning, Kronecker structure, and computational accounting}
+\label{cov-computation}
+
+\subsection{Deriving the spectral condition number}
+\label{cov-condition}
+
+For a real symmetric nonsingular $H$, take the orthogonal
+eigendecomposition $H=O\Lambda O^\top$, with
+$\Lambda=\diag(\lambda_1,\ldots,\lambda_{n_\theta})$.
+Then
+\[
+ H^\top H=O\Lambda^2O^\top .
+\]
+The singular values are the square roots of the eigenvalues of this
+product, namely $|\lambda_a|$.  Therefore
+\begin{equation}
+ \|H\|_2=\max_a|\lambda_a|,\qquad
+ \|H^{-1}\|_2=\frac1{\min_a|\lambda_a|},\qquad
+ \kappa_2(H)=\frac{\max_a|\lambda_a|}{\min_a|\lambda_a|}.
+ \label{cov-spectral-condition}
+\end{equation}
+For SPD $H$, absolute values can be dropped.  For an indefinite matrix,
+using the largest signed eigenvalue divided by the smallest signed
+eigenvalue is wrong.  A zero eigenvalue makes the matrix singular and
+the ordinary condition number infinite.  The example
+$\diag(1,-1)$ has $\kappa_2=1$ but cannot be a covariance precision
+for a nondegenerate Gaussian distribution.
+
+For a block diagonal matrix,
+$\det(tI-D)=\prod_g\det(tI-D_g)$, so its spectrum is the union of
+block spectra and
+\[
+ \kappa_2(D)=
+ \frac{\max_g\max_a|\lambda_a(D_g)|}
+      {\min_g\min_a|\lambda_a(D_g)|}.
+\]
+This is not generally $\max_g\kappa_2(D_g)$.  For example,
+$D_1=I_P$ and $D_2=10^6I_P$ each have condition number one,
+whereas $\blkdiag(D_1,D_2)$ has condition number $10^6$.
+The scale across blocks matters even when each block is internally
+well conditioned.
+
+For a bordered system, Equation~\eqref{cov-congruence} preserves
+inertia, not eigenvalues.  In the scalar-block example
+$D=1$, $F=t$, $\mathcal E=1+t^2$, the Schur complement is $S=1$.
+Both factors have condition number one, but the full matrix has
+determinant one and trace $t^2+2$.  Its eigenvalues are
+\[
+ \lambda_\pm=\frac{t^2+2\ \pm\sqrt{(t^2+2)^2-4}}2,
+\]
+so $\kappa_2(H)=\lambda_+/\lambda_-$ grows without bound as
+$|t|$ increases.  A full symmetric eigenproblem is required for
+the exact bordered spectral condition number.
+
+Conditioning depends on coefficient units.  Under a nonsingular linear
+reparameterization $\theta=L\phi$, the information becomes
+$H_\phi=L^\top H_\theta L$ and can have a different condition number,
+while correctly transformed contrasts describe the same estimand.
+For fixed $H$, perturbing a right-hand side gives the bound
+$\|\Delta x\|_2/\|x\|_2
+\leq\kappa_2(H)\|\Delta b\|_2/\|b\|_2$.
+This follows from $\Delta x=H^{-1}\Delta b$ and
+$\|b\|_2\leq\|H\|_2\|x\|_2$; it explains numerical sensitivity,
+not statistical validity.  A one-norm estimator such as LAPACK's
+\texttt{pocon} estimates a different norm condition number and is
+not an exact computation of $\kappa_2$.
+
+\subsection{When a Kronecker inverse is justified}
+\label{cov-kronecker}
+
+For the SV independent-cell information without a global border,
+Equation~\eqref{cov-sv-block} can be written
+\[
+ H=\sum_{i,j}w_{ij}(Z_iZ_i^\top)\otimes(B_jB_j^\top).
+\]
+If the weights really separate as $w_{ij}=a_i b_j$, distributivity
+of the tensor product gives the exact factorization
+\begin{equation}
+ H=A_Z\otimes A_B,\qquad
+ A_Z=\sum_i a_iZ_iZ_i^\top,\quad
+ A_B=\sum_j b_jB_jB_j^\top .
+ \label{cov-kron-factorization}
+\end{equation}
+This is a sufficient separability condition, not a consequence of
+having written an unweighted design as a Kronecker product.  Generic
+SV means vary with both study and voxel through several interacting
+maps.  Independent-NB denominators and observed curvature weights
+can destroy a mean factorization as well.  A sum of Kronecker products
+is not generally a single Kronecker product.  A global border or a
+penalty also requires an explicit new structural check.
+
+If the two square factors are nonsingular, the mixed-product rule
+verifies the inverse:
+\[
+ (A_Z\otimes A_B)(A_Z^{-1}\otimes A_B^{-1})
+ =(A_ZA_Z^{-1})\otimes(A_BA_B^{-1})=I_R\otimes I_P.
+\]
+The reverse product is the identity too.  If either factor is singular,
+a nonzero null vector in that factor produces a null vector of the
+product, so an ordinary inverse is unavailable.  Singular values
+of a Kronecker product are pairwise products of singular values of
+its factors; consequently, for nonsingular factors,
+\[
+ \kappa_2(A_Z\otimes A_B)=\kappa_2(A_Z)\kappa_2(A_B).
+\]
+For symmetric factors this also follows from tensor products of their
+orthonormal eigenvectors and products of absolute eigenvalues.
+
+To solve without forming the product, reshape a right-hand side as
+$b=\operatorname{vec}(Y)$ with $Y\in\R^{P\times R}$, stacking
+columns in the same map-major order as $\beta$.  The identity
+\[
+ (A_Z\otimes A_B)\operatorname{vec}(X)
+       =\operatorname{vec}(A_BXA_Z^\top)
+\]
+turns the equation into $A_BXA_Z^\top=Y$.  First solve
+$A_BW=Y$, then solve $A_ZX^\top=W^\top$.
+Using an approximate separable matrix as a preconditioner can be useful,
+but its inverse is not the exact covariance of the original information.
+
+\subsection{Operation counts, storage, and implementation scope}
+\label{cov-costs}
+
+The following counts concern linear algebra \emph{after} information
+assembly, use ordinary dense block arithmetic, and omit constant factors.
+Let block $g$ have size $d_g$, with $\sum_gd_g=d$; use component
+indices in place of group indices for general SV designs.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+Representation & Initial factorization work & Factor storage\\
+\midrule
+Full dense, $n_\theta=d+Q$
+ & $O(n_\theta^3)$
+ & $O(n_\theta^2)$\\
+Unbordered blocks
+ & $O(\sum_gd_g^3)$
+ & $O(\sum_gd_g^2)$\\
+Bordered blocks
+ & $O(\sum_gd_g^3+Q\sum_gd_g^2+dQ^2+Q^3)$
+ & $O(\sum_gd_g^2+dQ+Q^2)$\\
+Exact $A_Z\otimes A_B$
+ & $O(R^3+P^3)$
+ & $O(R^2+P^2)$\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+For the bordered row, the terms arise in order: factor every $D_g$;
+solve $D_gT_g=F_g$ for $Q$ right-hand sides; form
+$S=\mathcal E-F^\top T$; and factor $S$.
+Afterwards, solving $k$ general right-hand sides costs
+\[
+ O\left(k\sum_gd_g^2+kdQ+kQ^2\right).
+\]
+The block triangular solves account for the first term,
+$F^\top y$ and $Tx_\gamma$ for the second, and the Schur solves
+for the third.  A full dense solve after factorization costs
+$O(kn_\theta^2)$.  For the Kronecker system, the two factor solves
+cost $O(P^2R+PR^2)$ per right-hand side.  Holding its reshaped
+right-hand side requires $O(PR)$ additional storage.
+
+Selected covariance output has its own costs.  Storing $X$ in
+Equation~\eqref{cov-selected-solve} requires $O(n_\theta k)$,
+and a dense multiplication $CX$ costs $O(n_\theta k^2)$.
+If the full spatial correction is demanded, solving
+$SW=T^\top$ costs $O(Q^2d)$ and forming $TW$ costs $O(d^2Q)$;
+storing the resulting full covariance requires $O(n_\theta^2)$.
+Computing all diagonal entries avoids that output allocation, though
+generic block-inverse diagonals may still need
+$O(\sum_gd_g^3)$ work via solves against block identity matrices.
+
+For projected study sandwiches, forming $\mathsf U X$ costs
+$O(Mn_\theta k)$ with dense score rows and then its Gram matrix
+costs $O(Mk^2)$.  If scores arrive study by study, one can accumulate
+$v_iv_i^\top$ immediately and retain only $O(k^2)$ output storage,
+in addition to the factors and the contrast solves.  Model-specific
+sparse projections can reduce score-assembly work.  These are order
+calculations, not empirical performance claims; likelihood assembly,
+input storage, sparsity, and numerical libraries affect actual timings.
+
+The SPD path in \texttt{cbmr\_improved/structured.py} caches block
+Cholesky factors, computes $T$ by solves, and factorizes the Schur
+complement.  Its contrast, diagonal, and score-Gram operations implement
+the algebra above without a full spatial inverse on that path.
+If block or Schur Cholesky fails, it logs a fallback to a dense symmetric
+solve; an invertible indefinite matrix can then be solved algebraically,
+while a singular full system raises an error.  The structured savings
+need not survive this fallback.  Its full covariance compatibility
+method deliberately solves against the full identity.
+
+The same implementation computes the spectral condition number from
+block eigenvalues when there is no global border, and from a full
+dense symmetric eigenproblem when there is one.  That diagnostic itself
+can require $O(n_\theta^2)$ memory and $O(n_\theta^3)$ work even if
+the intended contrast solve is structured.  Exact algebraic identities
+do not remove floating-point error, establish statistical calibration,
+or constitute formal certification of this explanatory fragment.
+
+\subsection{Manual audit prompts}
+\label{cov-manual-audit}
+
+\begin{enumerate}
+ \item Which regression coefficients and nuisance parameters were actually
+ estimated?  Does the stated covariance condition on any of them?
+ \item Is the matrix observed information, expected information,
+ penalized curvature, or an estimating-equation sensitivity?  Are its
+ sign and summed-versus-averaged normalization explicit?
+ \item Can every claimed structural zero be traced to factor support or a
+ specified penalty?  Are entire connected components, not isolated
+ missing edges, used to choose blocks?
+ \item Do the products $DT=F$, $S=\mathcal E-F^\top T$, and
+ $HX=C^\top$ have small residuals at the numerical fit?  Are the
+ matrices whose positive definiteness is required actually SPD?
+ \item Are group cross covariances retained, and does a selected contrast
+ use the same coefficient ordering as $C_Z\otimes B_j^\top$ or
+ $C_G\otimes B_j^\top$?
+ \item For a sandwich, are the score rows derivatives of the chosen
+ likelihood or estimating equation, grouped by genuinely independent
+ units?  Is their rank sufficient for the proposed test?
+ \item For a penalty or numerical ridge, what changes in the estimator,
+ bias, covariance interpretation, and identification assumptions?
+ Was smoothing selection uncertainty intentionally included or omitted?
+ \item Does a proposed Kronecker factorization hold for the actual
+ weights at this fit, rather than only for the unweighted design?
+ \item Which statements are exact matrix identities, which are
+ first-order approximations, and which rely on a bootstrap or empirical
+ calibration?  Have finite-sample validity and multiplicity been assessed
+ separately from computational speed?
+\end{enumerate}

@@ -50,7 +50,7 @@ the likelihood curvature and its structure.
 \end{block}
 \begin{itemize}
   \item Fit the same specified likelihood; derive its score and information.
-  \item Exploit affine predictors, repeated design patterns, and block structure.
+  \item Exploit affine predictors, repeated patterns, and structured Hessian solves.
   \item Keep statistical assumptions visible when simplifying computation.
 \end{itemize}
 \column{0.39\textwidth}
@@ -248,32 +248,79 @@ $c_i=(n_i+\nu)/(t_i+\nu)$, the observed information in the log means is
 \end{frame}
 
 \begin{frame}{Schur complement: shared effects couple otherwise separate maps}
-Suppose the spatial information is block diagonal, but spatial and global
-coefficients interact:
+Disjoint spatial design components give $D=\blkdiag(D_1,\ldots,D_G)$,
+but shared global coefficients supply a border:
 \[
 H=\begin{pmatrix}D&F\\F^\top&\mathcal E\end{pmatrix},
 \qquad T=D^{-1}F,\qquad S=\mathcal E-F^\top T.
 \]
-Eliminating the spatial coefficients in $Hx=b$ gives
+From $Dx_D+Fx_\gamma=b_D$, substitute
+$x_D=D^{-1}b_D-Tx_\gamma$ into the second block equation:
 \[
+Sx_\gamma=b_\gamma-F^\top D^{-1}b_D,
+\qquad
 x_\gamma=S^{-1}(b_\gamma-F^\top D^{-1}b_D),\qquad
 x_D=D^{-1}b_D-Tx_\gamma.
 \]
-Consequently,
+\begin{block}{The inversion step}
+Factor the smaller $D_g$ blocks and the $Q\times Q$ Schur matrix $S$;
+solve against right-hand sides rather than explicitly inverting $H$.
+\end{block}
+\small The displayed elimination requires invertible $D$ and $S$.
+For an SPD $H$ both are SPD; an indefinite or singular system needs
+appropriate pivoting or may have no ordinary inverse.
+\end{frame}
+
+\begin{frame}{What the block inverse proves about uncertainty}
+Expanding the Schur solve in $b_D$ and $b_\gamma$ yields
 \[
-\boxed{(H^{-1})_{\beta\beta}=D^{-1}+TS^{-1}T^\top,\qquad
-(H^{-1})_{\beta\gamma}=-TS^{-1}.}
+\boxed{H^{-1}=
+\begin{pmatrix}
+D^{-1}+TS^{-1}T^\top&-TS^{-1}\\
+-S^{-1}T^\top&S^{-1}
+\end{pmatrix}.}
+\]
+\small For different groups $g\ne h$,
+$\Cov(\widehat\xi_g,\widehat\xi_h)\ \approx\
+T_gS^{-1}T_h^\top$ under the model-based covariance approximation.
+\begin{itemize}
+  \item Although $D_g$ and $D_h$ do not interact in $H$, their inverse
+        cross block generally is nonzero.
+  \item The correction $TS^{-1}T^\top$ has rank at most $Q$; when $H$ is
+        SPD it is positive semidefinite.
+\end{itemize}
+\begin{block}{Small check}
+For $D=\diag(2,3)$, $F=(1,1)^\top$, $\mathcal E=2$:
+$T=(1/2,1/3)^\top$, $S=7/6$, so the cross-group inverse entry is
+$(1/2)(6/7)(1/3)=1/7$, not zero.
+\end{block}
+\small The inverse identity is exact algebra; interpreting it as an estimator
+covariance is a local/asymptotic step.
+\end{frame}
+
+\begin{frame}{Inversion for contrasts: never form an unwanted full covariance}
+For $k$ requested linear contrasts (rows of $C$), solve
+\[
+HX=C^\top,\qquad
+\boxed{V_C=CX=CH^{-1}C^\top}.
+\]
+Only $k$ right-hand sides are needed. Partition
+$C=[\,C_D\ \ C_\gamma\,]$ and put $A_C=C_\gamma-C_DT$.
+The block inverse gives the smaller calculation
+\[
+\boxed{V_C=C_DD^{-1}C_D^\top+A_CS^{-1}A_C^\top.}
 \]
 \begin{itemize}
-  \item The spatial correction has rank at most the number $Q$ of global
-        coefficients.
-  \item Separate spatial information blocks do \emph{not} imply independent
-        fitted maps: shared global effects induce cross-group covariance.
-  \item Use solves with $D$ and $S$; a dense inverse is not needed for selected
-        contrasts.
+  \item Factor each $D_g$ and $S$ once; compute both terms by solves.
+  \item For a spatial-only contrast, $C_\gamma=0$ but the Schur term
+        remains unless $C_DT=0$.
+  \item Factor storage: $O(\sum_gd_g^2+dQ+Q^2)$ rather than
+        $O((d+Q)^2)$ for dense factors; a full covariance output
+        still takes $O((d+Q)^2)$ entries.
 \end{itemize}
-\small $H^{-1}$ is exact matrix algebra when invertible; using it as estimator
-covariance is a local/asymptotic approximation with additional assumptions.
+\small Factorization work after assembly:
+$O(\sum_gd_g^3+Q\sum_gd_g^2+dQ^2+Q^3)$ versus
+$O((d+Q)^3)$ dense; savings depend on actual block sizes.
 \end{frame}
 
 \begin{frame}{Shared spatial patterns: one local calculation, many blocks}
@@ -332,8 +379,8 @@ does not certify every handwritten intermediate derivation.
   \item Correct reductions depend on the likelihood: Poisson compression is
         exact with study totals; aggregated NB is moment matched; clustered NB
         retains shared-study dependence.
-  \item Block and Schur algebra preserve uncertainty from shared effects while
-        enabling structured solves and selected contrasts.
+  \item Block and Schur algebra avoid a full Hessian inverse for selected
+        contrasts while retaining uncertainty from shared effects.
 \end{enumerate}
 \vfill
 \begin{block}{Suggested discussion}

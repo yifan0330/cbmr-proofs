@@ -1,0 +1,77 @@
+make -k -j1 benchmark-expanded calibration-expanded
+make[1]: Entering directory '/gpfs3/well/nichols/users/pra123/cbmr-proofs'
+python -m comparison.benchmark --sizes small moderate large \
+	--models poisson aggregated_nb clustered_nb --designs gc \
+	--workloads hessian contrast_covariance --repeats 3 --threads 1 \
+	--timeout 600 --max-estimated-mib 128 \
+	--output comparison/results/benchmark-expanded.json
+| Model/design | N/V/P | Method/workload | Rel. error | Median s | Peak MiB* |
+|---|---:|---|---:|---:|---:|
+| poisson/gc | 32/32/13 | original/hessian | 4.924e-17 | 0.0472 | 261.1 |
+| poisson/gc | 32/32/13 | improved/hessian | 4.924e-17 | 0.002059 | 260.2 |
+| poisson/gc | 32/32/13 | unsimplified_autodiff/hessian | 0 | 0.00736 | 251.7 |
+| poisson/gc | 32/32/13 | original/contrast_covariance | 1.533e-19 | 0.002121 | 264.5 |
+| poisson/gc | 32/32/13 | improved/contrast_covariance | 8.775e-19 | 0.003185 | 264.2 |
+| poisson/gc | 32/32/13 | unsimplified_autodiff/contrast_covariance | 0 | 0.007377 | 253.8 |
+| aggregated_nb/gc | 32/32/13 | original/hessian | 7.247e-15 | 0.002797 | 263.1 |
+| aggregated_nb/gc | 32/32/13 | improved/hessian | 8.938e-15 | 0.002826 | 262.4 |
+| aggregated_nb/gc | 32/32/13 | unsimplified_autodiff/hessian | 0 | 0.1024 | 254.1 |
+| aggregated_nb/gc | 32/32/13 | original/contrast_covariance | 7.153e-17 | 0.003459 | 262.9 |
+| aggregated_nb/gc | 32/32/13 | improved/contrast_covariance | 8.699e-17 | 0.00403 | 262.9 |
+| aggregated_nb/gc | 32/32/13 | unsimplified_autodiff/contrast_covariance | 0 | 0.1154 | 253.3 |
+| clustered_nb/gc | 32/32/13 | original/hessian | 5.367e-16 | 0.00138 | 261.6 |
+| clustered_nb/gc | 32/32/13 | improved/hessian | 5.367e-16 | 0.0975 | 259.9 |
+| clustered_nb/gc | 32/32/13 | unsimplified_autodiff/hessian | 0 | 0.41 | 252.2 |
+| clustered_nb/gc | 32/32/13 | original/contrast_covariance | 1.458e-16 | 0.002059 | 263.4 |
+| clustered_nb/gc | 32/32/13 | improved/contrast_covariance | 1.458e-16 | 0.002686 | 266.6 |
+| clustered_nb/gc | 32/32/13 | unsimplified_autodiff/contrast_covariance | 0 | 0.009145 | 252.4 |
+| poisson/gc | 64/96/33 | original/hessian | 1.11e-16 | 0.001387 | 261.2 |
+| poisson/gc | 64/96/33 | improved/hessian | 1.11e-16 | 0.002153 | 260.1 |
+| poisson/gc | 64/96/33 | unsimplified_autodiff/hessian | 0 | 0.01376 | 253.4 |
+| poisson/gc | 64/96/33 | original/contrast_covariance | 2.206e-19 | 0.001986 | 261.6 |
+| poisson/gc | 64/96/33 | improved/contrast_covariance | 3.03e-20 | 0.09695 | 262.4 |
+| poisson/gc | 64/96/33 | unsimplified_autodiff/contrast_covariance | 0 | 0.3476 | 254.7 |
+| aggregated_nb/gc | 64/96/33 | original/hessian | 3.79e-15 | 0.08511 | 261 |
+| aggregated_nb/gc | 64/96/33 | improved/hessian | 1.112e-15 | 0.09878 | 259.6 |
+| aggregated_nb/gc | 64/96/33 | unsimplified_autodiff/hessian | 0 | 0.8248 | 253.3 |
+| aggregated_nb/gc | 64/96/33 | original/contrast_covariance | 1.088e-17 | 0.1023 | 262.2 |
+| aggregated_nb/gc | 64/96/33 | improved/contrast_covariance | 3.111e-18 | 0.09813 | 260.8 |
+| aggregated_nb/gc | 64/96/33 | unsimplified_autodiff/contrast_covariance | 0 | 0.719 | 254.6 |
+| clustered_nb/gc | 64/96/33 | original/hessian | 5.841e-16 | 0.01567 | 263 |
+| clustered_nb/gc | 64/96/33 | improved/hessian | 5.841e-16 | 0.0169 | 262 |
+| clustered_nb/gc | 64/96/33 | unsimplified_autodiff/hessian | 0 | 0.4426 | 252.9 |
+| clustered_nb/gc | 64/96/33 | original/contrast_covariance | 3.482e-17 | 0.09982 | 260 |
+| clustered_nb/gc | 64/96/33 | improved/contrast_covariance | 3.394e-17 | 0.1619 | 260.9 |
+| clustered_nb/gc | 64/96/33 | unsimplified_autodiff/contrast_covariance | 0 | 0.4976 | 253 |
+| poisson/gc | 128/256/33 | original/hessian | 3.345e-16 | 0.09981 | 261.3 |
+| poisson/gc | 128/256/33 | improved/hessian | 3.345e-16 | 0.1006 | 260.3 |
+| poisson/gc | 128/256/33 | unsimplified_autodiff/hessian | 0 | 0.4221 | 255.9 |
+| poisson/gc | 128/256/33 | original/contrast_covariance | 2.905e-20 | 0.002067 | 263.6 |
+| poisson/gc | 128/256/33 | improved/contrast_covariance | 3.403e-20 | 0.003097 | 261.5 |
+| poisson/gc | 128/256/33 | unsimplified_autodiff/contrast_covariance | 0 | 0.1073 | 257.7 |
+| aggregated_nb/gc | 128/256/33 | original/hessian | 3.069e-15 | 0.004315 | 261.5 |
+| aggregated_nb/gc | 128/256/33 | improved/hessian | 3.118e-15 | 0.003862 | 261.9 |
+| aggregated_nb/gc | 128/256/33 | unsimplified_autodiff/hessian | 0 | 0.5084 | 253.5 |
+| aggregated_nb/gc | 128/256/33 | original/contrast_covariance | 2.444e-18 | 0.08432 | 262.7 |
+| aggregated_nb/gc | 128/256/33 | improved/contrast_covariance | 2.499e-18 | 0.005015 | 263.3 |
+| aggregated_nb/gc | 128/256/33 | unsimplified_autodiff/contrast_covariance | 0 | 0.4912 | 255.7 |
+| clustered_nb/gc | 128/256/33 | original/hessian | 4.638e-16 | 0.001644 | 261.6 |
+| clustered_nb/gc | 128/256/33 | improved/hessian | 4.638e-16 | 0.002385 | 259.2 |
+| clustered_nb/gc | 128/256/33 | unsimplified_autodiff/hessian | 0 | 0.1969 | 256.3 |
+| clustered_nb/gc | 128/256/33 | original/contrast_covariance | 2.571e-16 | 0.002313 | 262.4 |
+| clustered_nb/gc | 128/256/33 | improved/contrast_covariance | 2.554e-16 | 0.0031 | 262.4 |
+| clustered_nb/gc | 128/256/33 | unsimplified_autodiff/contrast_covariance | 0 | 0.1068 | 258 |
+*Absolute process high-water RSS, not incremental memory. JSON: comparison/results/benchmark-expanded.json
+python -m comparison.calibration --size large --design gc --replicates 100 \
+	--models poisson independent_nb aggregated_nb clustered_nb --threads 1 \
+	--output comparison/results/calibration-expanded.json
+| Model | Attempts | Accepted inference | Failures | Null FPR (MCSE) |
+|---|---:|---:|---:|---:|
+| poisson | 100 | 0 | 100 | unavailable |
+| independent_nb | 100 | 0 | 100 | unavailable |
+| aggregated_nb | 100 | 0 | 100 | unavailable |
+| clustered_nb | 100 | 0 | 100 | unavailable |
+Small runs are not calibration evidence. Failed replicates retained. JSON: comparison/results/calibration-expanded.json
+make[1]: *** [Makefile:43: calibration-expanded] Error 1
+make[1]: Leaving directory '/gpfs3/well/nichols/users/pra123/cbmr-proofs'
+make: *** [Makefile:31: comparison-expanded] Error 2

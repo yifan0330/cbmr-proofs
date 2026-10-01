@@ -1,0 +1,690 @@
+{
+  "purpose": "Floating-point implementation regression; not a symbolic proof or calibration study.",
+  "seed": 731,
+  "derivative_rtol": 1e-08,
+  "derivative_atol": 1e-10,
+  "fit_tolerances": {
+    "rtol": 1e-05,
+    "atol": 2e-06,
+    "maximum_score_infinity_norm": 2e-05
+  },
+  "dispersion": "Fixed, including throughout fit comparisons.",
+  "sections": [
+    "covariance"
+  ],
+  "environment": {
+    "python": "3.11.14 | packaged by conda-forge | (main, Oct 22 2025, 22:46:25) [GCC 14.3.0]",
+    "platform": "Linux-4.18.0-553.159.1.el8_10.x86_64-x86_64-with-glibc2.28",
+    "numpy": "1.24.4",
+    "scipy": "1.11.2",
+    "torch": "2.0.1+cu117"
+  },
+  "source_hashes": {
+    "cbmr_code/__init__.py": "bd11ff71c88a836082a5fd4e5c8b0a0315da49230ee72acb22f07b7d508e6e8d",
+    "cbmr_code/_helpers.py": "a8e1d7a85a7aa3754d3016b033398886bc1745c360e8adddf3ea198a9686b683",
+    "cbmr_code/_torch.py": "e6737ba742060592280bb53d0b64aaaf52fcbf14a158f44df63093d3792e1871",
+    "cbmr_code/basis.py": "e77568120adc08d8b2a3421a39d3595e4d6beb62402252be0e4e95cdfff88a8a",
+    "cbmr_code/contrasts.py": "f37984e24e92f3581b8170ef114c242d1dd84a13a1a67fabf5a467b83009fce5",
+    "cbmr_code/covariance.py": "880dca596220ede9a7dc8148c538e55f787be0a9b2b7a7254bf8329b61419038",
+    "cbmr_code/distributions.py": "4d24990daea729d1b41f0e83d46284eb6b54dbd4e91c5d4132d9a39ef9b7cfe1",
+    "cbmr_code/estimator.py": "2196bf40b1fbe8e3fee914ce5598c9e6096723849c3e6ec019b4673c210233cf",
+    "cbmr_code/information.py": "ca04319659a8cc45ff140b40719821d006198c228054d94b826fb64b915cb5ff",
+    "cbmr_code/model.py": "6ead23af283beb0fbb6d60c2e99c155915fa2fa740e3097ea1bb19680ce4a6ec",
+    "cbmr_code/predictor.py": "eee4e96794e9645dd207190ae3cc63558db2414c98deb5b81eb968922e6a1692",
+    "cbmr_code/results.py": "7c780fadd22f9073be14d86f3a20e04cd8eeb0a960cc5617f9208efa2bc52bfa",
+    "cbmr_code/terms.py": "c12ff42543a31011efaa7f9307ad01dce7a3907fc77d361b35b903c3a2a72db2",
+    "cbmr_improved/__init__.py": "2b5310cd0f6b76186ffa8cf93439ae0090114a887a4913fb9217af19d4c9ff5b",
+    "cbmr_improved/_helpers.py": "a8e1d7a85a7aa3754d3016b033398886bc1745c360e8adddf3ea198a9686b683",
+    "cbmr_improved/_torch.py": "e6737ba742060592280bb53d0b64aaaf52fcbf14a158f44df63093d3792e1871",
+    "cbmr_improved/basis.py": "e77568120adc08d8b2a3421a39d3595e4d6beb62402252be0e4e95cdfff88a8a",
+    "cbmr_improved/contrasts.py": "f49555fb52f78d521d1435669f203f66d6b9c507927465bdf2bbb4baf39a2a53",
+    "cbmr_improved/covariance.py": "f095f8f869859cf8ad2a74011588b4cbb1895ab5121f24e8f0c8fb5804b92631",
+    "cbmr_improved/distributions.py": "33b4ec8c0e9ec8f1da1f39e2d55a5c99f5d54119e6538d973486a1ef387c48f7",
+    "cbmr_improved/estimator.py": "545c3ace7d0c33fdcaa17e247565ece2fa9872ccefa079786b568de3457cb9bd",
+    "cbmr_improved/information.py": "ebd143fd2054f9771cb218de99a817f54a856da3e7553683dec0f3bdf39bff0e",
+    "cbmr_improved/model.py": "4d9cea530150ee3a2765f4ba9270fce83acda67f115400ea593ba09829a1e48a",
+    "cbmr_improved/predictor.py": "e10102f7ff0ff66f52eead687cc7a4e9afbfdbd360ab1c02e3107b35baaf8f27",
+    "cbmr_improved/results.py": "b6f58087407e61e4f7b5e95d4bb5cdb174e9b26113f99f28043afa6055797174",
+    "cbmr_improved/structured.py": "069541f08b2d693a304f933933f5b422fc090747b86cd575bb281c3164485c18",
+    "cbmr_improved/terms.py": "c12ff42543a31011efaa7f9307ad01dce7a3907fc77d361b35b903c3a2a72db2"
+  },
+  "applicability": {
+    "actual_source_likelihoods": [
+      "poisson",
+      "aggregated_nb",
+      "clustered_nb"
+    ],
+    "reference_and_helper_only": [
+      "independent_nb"
+    ],
+    "penalties": "External fixed quadratic wrapper; neither source gains penalty support."
+  },
+  "summary": {
+    "required": 46,
+    "failed": 0,
+    "diagnostic": 1
+  },
+  "rows": [
+    {
+      "layer": "conditioning",
+      "case": "positive_definite_block",
+      "comparison": "SVD / absolute eigenvalues",
+      "passed": true,
+      "svd_condition": 3.2241214233839144,
+      "eigen_condition": 3.2241214233839144,
+      "condition_times_epsilon": 7.158987676856109e-16,
+      "error": {
+        "passed": true,
+        "max_absolute": 0.0,
+        "relative_frobenius": 0.0,
+        "reference_norm": 3.2241214233839144,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "interpretation": "Symmetric singular values are absolute eigenvalues."
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "positive_definite_block",
+      "comparison": "dense",
+      "passed": true,
+      "frobenius": 1.8020168168653365e-16,
+      "relative_frobenius": 7.356702848724059e-17,
+      "backward_error": 1.6852826868664256e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 0.0,
+        "relative_frobenius": 0.0,
+        "reference_norm": 0.7452652234770195,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_block",
+      "comparison": "dense / dense inverse",
+      "passed": true,
+      "max_absolute": 0.0,
+      "relative_frobenius": 0.0,
+      "reference_norm": 0.7452652234770195,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "positive_definite_block",
+      "comparison": "original",
+      "passed": true,
+      "frobenius": 1.8020168168653365e-16,
+      "relative_frobenius": 7.356702848724059e-17,
+      "backward_error": 1.6852826868664256e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 0.0,
+        "relative_frobenius": 0.0,
+        "reference_norm": 0.7452652234770195,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_block",
+      "comparison": "original / dense inverse",
+      "passed": true,
+      "max_absolute": 0.0,
+      "relative_frobenius": 0.0,
+      "reference_norm": 0.7452652234770195,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "positive_definite_block",
+      "comparison": "structured",
+      "passed": true,
+      "frobenius": 5.59727808393986e-16,
+      "relative_frobenius": 2.285079209019295e-16,
+      "backward_error": 5.2346880229728995e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 1.1102230246251565e-16,
+        "relative_frobenius": 1.3238565818820347e-16,
+        "reference_norm": 0.7452652234770195,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_block",
+      "comparison": "structured / dense inverse",
+      "passed": true,
+      "max_absolute": 1.1102230246251565e-16,
+      "relative_frobenius": 1.3238565818820347e-16,
+      "reference_norm": 0.7452652234770195,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_block",
+      "comparison": "structured / dense multiple-RHS solve",
+      "passed": true,
+      "max_absolute": 2.220446049250313e-16,
+      "relative_frobenius": 2.2982569049649886e-16,
+      "reference_norm": 1.516870296040057,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_block",
+      "comparison": "diagonal without full inverse",
+      "passed": true,
+      "max_absolute": 1.1102230246251565e-16,
+      "relative_frobenius": 1.2719202621569003e-16,
+      "reference_norm": 0.7100076920866782,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_block",
+      "comparison": "full / projected Fisher covariance",
+      "passed": true,
+      "max_absolute": 2.220446049250313e-16,
+      "relative_frobenius": 1.2043031855274095e-16,
+      "reference_norm": 2.112292448350336,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_block",
+      "comparison": "full / projected score sandwich",
+      "passed": true,
+      "max_absolute": 3.552713678800501e-15,
+      "relative_frobenius": 2.9860361322142567e-16,
+      "reference_norm": 12.105092262316477,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_block",
+      "comparison": "union of block eigenvalues",
+      "passed": true,
+      "max_absolute": 0.0,
+      "relative_frobenius": 0.0,
+      "reference_norm": 3.2241214233839144,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "conditioning",
+      "case": "positive_definite_border",
+      "comparison": "SVD / absolute eigenvalues",
+      "passed": true,
+      "svd_condition": 7.169120436952646,
+      "eigen_condition": 7.169120436952645,
+      "condition_times_epsilon": 1.5918645150831181e-15,
+      "error": {
+        "passed": true,
+        "max_absolute": 8.881784197001252e-16,
+        "relative_frobenius": 1.2388945443322198e-16,
+        "reference_norm": 7.169120436952646,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "interpretation": "Symmetric singular values are absolute eigenvalues."
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "positive_definite_border",
+      "comparison": "dense",
+      "passed": true,
+      "frobenius": 2.977507722453858e-16,
+      "relative_frobenius": 1.0527079507912178e-16,
+      "backward_error": 1.4023666733181896e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 0.0,
+        "relative_frobenius": 0.0,
+        "reference_norm": 1.6395742721790285,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_border",
+      "comparison": "dense / dense inverse",
+      "passed": true,
+      "max_absolute": 0.0,
+      "relative_frobenius": 0.0,
+      "reference_norm": 1.6395742721790285,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "positive_definite_border",
+      "comparison": "original",
+      "passed": true,
+      "frobenius": 3.879302233948976e-16,
+      "relative_frobenius": 1.3715404579487218e-16,
+      "backward_error": 1.8270999358266665e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 5.551115123125783e-17,
+        "relative_frobenius": 6.505309273252138e-17,
+        "reference_norm": 1.6395742721790285,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_border",
+      "comparison": "original / dense inverse",
+      "passed": true,
+      "max_absolute": 5.551115123125783e-17,
+      "relative_frobenius": 6.505309273252138e-17,
+      "reference_norm": 1.6395742721790285,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "positive_definite_border",
+      "comparison": "structured",
+      "passed": true,
+      "frobenius": 3.924111795425466e-16,
+      "relative_frobenius": 1.3873830303397324e-16,
+      "backward_error": 1.8482046453751085e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 5.551115123125783e-17,
+        "relative_frobenius": 7.768907384320012e-17,
+        "reference_norm": 1.6395742721790285,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_border",
+      "comparison": "structured / dense inverse",
+      "passed": true,
+      "max_absolute": 5.551115123125783e-17,
+      "relative_frobenius": 7.768907384320012e-17,
+      "reference_norm": 1.6395742721790285,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_border",
+      "comparison": "structured / dense multiple-RHS solve",
+      "passed": true,
+      "max_absolute": 2.220446049250313e-16,
+      "relative_frobenius": 1.7742405732846714e-16,
+      "reference_norm": 2.682182439857172,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_border",
+      "comparison": "diagonal without full inverse",
+      "passed": true,
+      "max_absolute": 5.551115123125783e-17,
+      "relative_frobenius": 6.97578579834599e-17,
+      "reference_norm": 1.5915382965004436,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_border",
+      "comparison": "full / projected Fisher covariance",
+      "passed": true,
+      "max_absolute": 8.881784197001252e-16,
+      "relative_frobenius": 1.4414491263909286e-16,
+      "reference_norm": 7.05911981974145,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "positive_definite_border",
+      "comparison": "full / projected score sandwich",
+      "passed": true,
+      "max_absolute": 1.1345091532888318e-14,
+      "relative_frobenius": 1.4263870533641555e-16,
+      "reference_norm": 103.13136098476328,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "conditioning",
+      "case": "indefinite_border",
+      "comparison": "SVD / absolute eigenvalues",
+      "passed": true,
+      "svd_condition": 7.0100166289328545,
+      "eigen_condition": 7.010016628932858,
+      "condition_times_epsilon": 1.5565363728892955e-15,
+      "error": {
+        "passed": true,
+        "max_absolute": 3.552713678800501e-15,
+        "relative_frobenius": 5.068053140041318e-16,
+        "reference_norm": 7.0100166289328545,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "interpretation": "Symmetric singular values are absolute eigenvalues."
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "indefinite_border",
+      "comparison": "dense",
+      "passed": true,
+      "frobenius": 4.237394579097946e-16,
+      "relative_frobenius": 1.498145220721637e-16,
+      "backward_error": 2.2333874794207575e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 0.0,
+        "relative_frobenius": 0.0,
+        "reference_norm": 1.7918146125792551,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "indefinite_border",
+      "comparison": "dense / dense inverse",
+      "passed": true,
+      "max_absolute": 0.0,
+      "relative_frobenius": 0.0,
+      "reference_norm": 1.7918146125792551,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "indefinite_border",
+      "comparison": "original",
+      "passed": true,
+      "frobenius": 5.363398173372234e-16,
+      "relative_frobenius": 1.8962476092975242e-16,
+      "backward_error": 2.82686592054585e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 2.220446049250313e-16,
+        "relative_frobenius": 1.440723675309595e-16,
+        "reference_norm": 1.7918146125792551,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "indefinite_border",
+      "comparison": "original / dense inverse",
+      "passed": true,
+      "max_absolute": 2.220446049250313e-16,
+      "relative_frobenius": 1.440723675309595e-16,
+      "reference_norm": 1.7918146125792551,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "indefinite_border",
+      "comparison": "structured",
+      "passed": true,
+      "frobenius": 4.683117011528619e-16,
+      "relative_frobenius": 1.6557318979709828e-16,
+      "backward_error": 2.4683127103157157e-17,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 1.1102230246251565e-16,
+        "relative_frobenius": 1.0102796818211134e-16,
+        "reference_norm": 1.7918146125792551,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": true
+    },
+    {
+      "layer": "covariance",
+      "case": "indefinite_border",
+      "comparison": "structured / dense inverse",
+      "passed": true,
+      "max_absolute": 1.1102230246251565e-16,
+      "relative_frobenius": 1.0102796818211134e-16,
+      "reference_norm": 1.7918146125792551,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "indefinite_border",
+      "comparison": "structured / dense multiple-RHS solve",
+      "passed": true,
+      "max_absolute": 4.440892098500626e-16,
+      "relative_frobenius": 1.858904573509908e-16,
+      "reference_norm": 4.335820730407199,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "indefinite_border",
+      "comparison": "diagonal without full inverse",
+      "passed": true,
+      "max_absolute": 1.1102230246251565e-16,
+      "relative_frobenius": 9.099146007507838e-17,
+      "reference_norm": 1.7255382619294921,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "indefinite_border",
+      "comparison": "full / projected Fisher covariance",
+      "passed": true,
+      "max_absolute": 8.881784197001252e-16,
+      "relative_frobenius": 2.0869671732217632e-16,
+      "reference_norm": 5.212309893351756,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "indefinite_border",
+      "comparison": "full / projected score sandwich",
+      "passed": true,
+      "max_absolute": 1.4210854715202004e-14,
+      "relative_frobenius": 1.2870592152540174e-16,
+      "reference_norm": 123.44590204147528,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "conditioning",
+      "case": "nearly_singular_border",
+      "comparison": "SVD / absolute eigenvalues",
+      "passed": null,
+      "svd_condition": 6937989020404.77,
+      "eigen_condition": 6936203755146.675,
+      "condition_times_epsilon": 0.001540543031009982,
+      "error": {
+        "passed": false,
+        "max_absolute": 1785265258.0947266,
+        "relative_frobenius": 0.00025731739454245666,
+        "reference_norm": 6937989020404.77,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "interpretation": "Near singularity, condition estimates and inverse entries are diagnostics."
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "nearly_singular_border",
+      "comparison": "dense",
+      "passed": true,
+      "frobenius": 7.171192180172151e-05,
+      "relative_frobenius": 2.5353993098958347e-05,
+      "backward_error": 6.24587148955357e-18,
+      "entry_error": {
+        "passed": true,
+        "max_absolute": 0.0,
+        "relative_frobenius": 0.0,
+        "reference_norm": 1027859855883.9684,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": false
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "nearly_singular_border",
+      "comparison": "original",
+      "passed": true,
+      "frobenius": 0.00010064712266904938,
+      "relative_frobenius": 3.5584131473099555e-05,
+      "backward_error": 8.76615355218153e-18,
+      "entry_error": {
+        "passed": false,
+        "max_absolute": 13877824.030639648,
+        "relative_frobenius": 1.3877709622796528e-05,
+        "reference_norm": 1027859855883.9684,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": false
+    },
+    {
+      "layer": "inverse_residual",
+      "case": "nearly_singular_border",
+      "comparison": "structured",
+      "passed": true,
+      "frobenius": 9.84978060891712e-05,
+      "relative_frobenius": 3.482423330882528e-05,
+      "backward_error": 8.579071636604823e-18,
+      "entry_error": {
+        "passed": false,
+        "max_absolute": 27755262.881835938,
+        "relative_frobenius": 2.775503406932564e-05,
+        "reference_norm": 1027859855883.9684,
+        "rtol": 1e-08,
+        "atol": 1e-10
+      },
+      "entry_equality_required": false
+    },
+    {
+      "layer": "conditioning",
+      "case": "deliberately_singular_block",
+      "comparison": "SVD / absolute eigenvalues",
+      "passed": true,
+      "svd_condition": "Infinity",
+      "eigen_condition": "Infinity",
+      "condition_times_epsilon": "Infinity",
+      "error": {
+        "passed": false,
+        "reason": "nonfinite actual or reference",
+        "actual_finite": false,
+        "reference_finite": false
+      },
+      "interpretation": "Symmetric singular values are absolute eigenvalues."
+    },
+    {
+      "layer": "covariance",
+      "case": "deliberately_singular_block",
+      "comparison": "dense inverse",
+      "passed": true,
+      "exception": "Singular matrix"
+    },
+    {
+      "layer": "covariance",
+      "case": "deliberately_singular_block",
+      "comparison": "structured solve",
+      "passed": true,
+      "exception": "Full structured information matrix is singular; covariance requires identifiable parameters"
+    },
+    {
+      "layer": "covariance",
+      "case": "deliberately_singular_block",
+      "comparison": "original block inverse",
+      "passed": true,
+      "exception": "Singular matrix"
+    },
+    {
+      "layer": "covariance",
+      "case": "separable_poisson",
+      "comparison": "original actual information / Kronecker",
+      "passed": true,
+      "max_absolute": 7.105427357601002e-15,
+      "relative_frobenius": 7.650526967880429e-17,
+      "reference_norm": 106.40168594895394,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "separable_poisson",
+      "comparison": "improved actual information / Kronecker",
+      "passed": true,
+      "max_absolute": 7.105427357601002e-15,
+      "relative_frobenius": 7.650526967880429e-17,
+      "reference_norm": 106.40168594895394,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "separable_poisson",
+      "comparison": "dense / Kronecker inverse",
+      "passed": true,
+      "max_absolute": 6.938893903907228e-18,
+      "relative_frobenius": 1.0558592909663e-17,
+      "reference_norm": 0.05206052877385405,
+      "rtol": 1e-08,
+      "atol": 1e-10
+    },
+    {
+      "layer": "covariance",
+      "case": "nonseparable_nb_weights",
+      "comparison": "Do not infer Kronecker weights from separable NB means",
+      "passed": true,
+      "weight_determinant": -0.5602240896358539,
+      "weight_rank": 2
+    },
+    {
+      "layer": "provenance",
+      "case": "source-implementations",
+      "comparison": "Both implementation directories unchanged during comparisons",
+      "passed": true
+    }
+  ],
+  "thread_environment": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1"
+  }
+}

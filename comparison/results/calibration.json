@@ -1,0 +1,1271 @@
+{
+  "schema_version": 1,
+  "kind": "statistical_calibration",
+  "status": "ok",
+  "question": "Do fixed-dispersion model-based Wald intervals cover and does the null moderator reject at its nominal rate? Matching Hessians does not imply coverage.",
+  "warning": "Small Monte Carlo runs are smoke tests, not calibration evidence. Plug-in binomial MCSE can be zero at observed rates 0 or 1; Wilson Monte Carlo intervals quantify uncertainty even at those endpoints.",
+  "fit": {
+    "optimizer": "scipy L-BFGS-B",
+    "initial_coefficients": "all zero",
+    "maxiter": 200,
+    "score_tolerance": 0.0001,
+    "dispersion": "Held fixed at true value, never optimized.",
+    "source_models": "Actual improved package objective with autograd gradient and actual improved observed information at fitted coefficients.",
+    "independent_nb": "Independent closed-form objective, score and observed information.",
+    "covariance": "Inverse observed information only if SPD; no pseudoinverse or ridge.",
+    "interval": "Two-sided 95% coefficient-wise Wald; no multiplicity adjustment."
+  },
+  "data_generating_distributions": {
+    "poisson": "Independent cells, Poisson(case.means()).",
+    "independent_nb": "Independent Gamma(mean=1, variance=dispersion) multiplier per cell.",
+    "clustered_nb": "One Gamma(mean=1, variance=dispersion) multiplier per experiment, shared across all voxels; experiments independent.",
+    "aggregated_nb": "Independent pattern-voxel NB totals: rho=(sum w)^2/(dispersion*sum w^2), w=exposure*exp(global_design*true_gamma); Gamma(rho, scale=1/rho) multiplied by the total mean, then Poisson. Totals placed deterministically in the first member experiment only as a representation. NOT an independent-cell DGP."
+  },
+  "metadata": {
+    "python": "3.11.14",
+    "platform": "Linux-4.18.0-553.159.1.el8_10.x86_64-x86_64-with-glibc2.28",
+    "numpy": "1.24.4",
+    "scipy": "1.11.2",
+    "torch": "2.0.1+cu117",
+    "threads": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "torch_threads": 1,
+    "torch_interop_threads": 1,
+    "source_hashes": {
+      "cbmr_code/__init__.py": "bd11ff71c88a836082a5fd4e5c8b0a0315da49230ee72acb22f07b7d508e6e8d",
+      "cbmr_code/_helpers.py": "a8e1d7a85a7aa3754d3016b033398886bc1745c360e8adddf3ea198a9686b683",
+      "cbmr_code/_torch.py": "e6737ba742060592280bb53d0b64aaaf52fcbf14a158f44df63093d3792e1871",
+      "cbmr_code/basis.py": "e77568120adc08d8b2a3421a39d3595e4d6beb62402252be0e4e95cdfff88a8a",
+      "cbmr_code/contrasts.py": "f37984e24e92f3581b8170ef114c242d1dd84a13a1a67fabf5a467b83009fce5",
+      "cbmr_code/covariance.py": "880dca596220ede9a7dc8148c538e55f787be0a9b2b7a7254bf8329b61419038",
+      "cbmr_code/distributions.py": "4d24990daea729d1b41f0e83d46284eb6b54dbd4e91c5d4132d9a39ef9b7cfe1",
+      "cbmr_code/estimator.py": "2196bf40b1fbe8e3fee914ce5598c9e6096723849c3e6ec019b4673c210233cf",
+      "cbmr_code/information.py": "ca04319659a8cc45ff140b40719821d006198c228054d94b826fb64b915cb5ff",
+      "cbmr_code/model.py": "6ead23af283beb0fbb6d60c2e99c155915fa2fa740e3097ea1bb19680ce4a6ec",
+      "cbmr_code/predictor.py": "eee4e96794e9645dd207190ae3cc63558db2414c98deb5b81eb968922e6a1692",
+      "cbmr_code/results.py": "7c780fadd22f9073be14d86f3a20e04cd8eeb0a960cc5617f9208efa2bc52bfa",
+      "cbmr_code/terms.py": "c12ff42543a31011efaa7f9307ad01dce7a3907fc77d361b35b903c3a2a72db2",
+      "cbmr_improved/__init__.py": "2b5310cd0f6b76186ffa8cf93439ae0090114a887a4913fb9217af19d4c9ff5b",
+      "cbmr_improved/_helpers.py": "a8e1d7a85a7aa3754d3016b033398886bc1745c360e8adddf3ea198a9686b683",
+      "cbmr_improved/_torch.py": "e6737ba742060592280bb53d0b64aaaf52fcbf14a158f44df63093d3792e1871",
+      "cbmr_improved/basis.py": "e77568120adc08d8b2a3421a39d3595e4d6beb62402252be0e4e95cdfff88a8a",
+      "cbmr_improved/contrasts.py": "f49555fb52f78d521d1435669f203f66d6b9c507927465bdf2bbb4baf39a2a53",
+      "cbmr_improved/covariance.py": "f095f8f869859cf8ad2a74011588b4cbb1895ab5121f24e8f0c8fb5804b92631",
+      "cbmr_improved/distributions.py": "33b4ec8c0e9ec8f1da1f39e2d55a5c99f5d54119e6538d973486a1ef387c48f7",
+      "cbmr_improved/estimator.py": "545c3ace7d0c33fdcaa17e247565ece2fa9872ccefa079786b568de3457cb9bd",
+      "cbmr_improved/information.py": "ebd143fd2054f9771cb218de99a817f54a856da3e7553683dec0f3bdf39bff0e",
+      "cbmr_improved/model.py": "4d9cea530150ee3a2765f4ba9270fce83acda67f115400ea593ba09829a1e48a",
+      "cbmr_improved/predictor.py": "e10102f7ff0ff66f52eead687cc7a4e9afbfdbd360ab1c02e3107b35baaf8f27",
+      "cbmr_improved/results.py": "b6f58087407e61e4f7b5e95d4bb5cdb174e9b26113f99f28043afa6055797174",
+      "cbmr_improved/structured.py": "069541f08b2d693a304f933933f5b422fc090747b86cd575bb281c3164485c18",
+      "cbmr_improved/terms.py": "c12ff42543a31011efaa7f9307ad01dce7a3907fc77d361b35b903c3a2a72db2"
+    }
+  },
+  "models": [
+    {
+      "model": "poisson",
+      "design": "gc",
+      "seed": 731,
+      "dimensions": {
+        "experiments": 24,
+        "voxels": 9,
+        "bases": 2,
+        "groups": 2,
+        "parameters": 5
+      },
+      "true_coefficients": [
+        0.25,
+        -0.10327240014190545,
+        0.25,
+        -0.08974496945506846,
+        0.0
+      ],
+      "null_moderator_index": 4,
+      "fixed_dispersion": 0.3,
+      "implementation": "improved",
+      "status": "ok",
+      "aggregate": {
+        "attempts": 3,
+        "successful_fits": 3,
+        "successful_inferences": 3,
+        "fit_failures": 0,
+        "inference_failures_after_successful_fit": 0,
+        "total_failed_replicates": 0,
+        "bias_denominator": 3,
+        "coverage_denominator": 3,
+        "false_positive_denominator": 3,
+        "conditioning": "Bias conditional on accepted fit; coverage/FPR conditional on accepted fit and SPD observed information. Failed attempts retained in replicates.",
+        "coefficient_bias": [
+          0.0023251159060909132,
+          -0.006696926965085823,
+          0.042679650001994696,
+          0.07082005898356353,
+          0.07331322446816635
+        ],
+        "coefficient_bias_mcse": [
+          0.05798662667825709,
+          0.06918929091579488,
+          0.02448313065111053,
+          0.016068433855077762,
+          0.019111651949151563
+        ],
+        "coverage": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.6666666666666666
+        ],
+        "coverage_mcse": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.2721655269759087
+        ],
+        "coverage_monte_carlo_interval95": [
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.2076596008020477,
+            0.9385080552796037
+          ]
+        ],
+        "null_moderator_false_positive_rate": 0.3333333333333333,
+        "null_moderator_false_positive_mcse": 0.2721655269759087,
+        "null_moderator_false_positive_interval95": [
+          0.06149194472039621,
+          0.7923403991979522
+        ]
+      },
+      "replicates": [
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 12,
+            "function_evaluations": 14,
+            "objective": 202.0411842686908,
+            "score": [
+              7.855736404493996e-06,
+              -3.500618959151325e-06,
+              8.476703975190958e-06,
+              6.178197597961343e-07,
+              7.05258173905321e-06
+            ],
+            "score_infinity_norm": 8.476703975190958e-06
+          },
+          "coefficients": [
+            0.22843480438371233,
+            -0.24732592752444632,
+            0.34138685556302656,
+            0.008108144084419441,
+            0.11083011916967228
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.08591324849058213,
+            0.13243015902422267,
+            0.08231470346520921,
+            0.12734398427359653,
+            0.054998046989784374
+          ],
+          "interval_lower": [
+            0.06004793154733121,
+            -0.5068842696788347,
+            0.18005300137312213,
+            -0.2414814787396648,
+            0.0030359278496533693
+          ],
+          "interval_upper": [
+            0.3968216772200934,
+            0.012232414629942123,
+            0.5027207097529309,
+            0.25769776690850366,
+            0.2186243104896912
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            false
+          ],
+          "null_moderator_rejected": true,
+          "seconds": 0.6609957070322707,
+          "total_count": 287,
+          "replicate": 0,
+          "seed_entropy": [
+            731,
+            0
+          ],
+          "seed_spawn_key": [
+            0
+          ]
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: NORM_OF_PROJECTED_GRADIENT_<=_PGTOL",
+            "iterations": 10,
+            "function_evaluations": 13,
+            "objective": 209.76573003901206,
+            "score": [
+              -6.37877661802122e-09,
+              -2.5552671090167678e-09,
+              -1.694567686172377e-08,
+              -1.4341199339185096e-09,
+              5.9074686475923954e-08
+            ],
+            "score_infinity_norm": 5.9074686475923954e-08
+          },
+          "coefficients": [
+            0.16598860307087596,
+            -0.05582881124152513,
+            0.2726823247912148,
+            -0.04749116102590446,
+            0.060889418357737354
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.088111723537028,
+            0.13645333691275152,
+            0.08524219935092138,
+            0.13143883470023476,
+            0.056916187789783204
+          ],
+          "interval_lower": [
+            -0.006707201677449093,
+            -0.32327243716082804,
+            0.10561068410042532,
+            -0.30510654320827807,
+            -0.05066425984755611
+          ],
+          "interval_upper": [
+            0.338684407819201,
+            0.2116148146777778,
+            0.4397539654820043,
+            0.21012422115646917,
+            0.1724430965630308
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.013084457023069263,
+          "total_count": 268,
+          "replicate": 1,
+          "seed_entropy": [
+            731,
+            0
+          ],
+          "seed_spawn_key": [
+            1
+          ]
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 11,
+            "function_evaluations": 13,
+            "objective": 202.90870678636688,
+            "score": [
+              3.171148534875101e-06,
+              9.301384302773386e-07,
+              -4.27873176889193e-06,
+              -2.2225898814731693e-06,
+              -5.8301609016098155e-06
+            ],
+            "score_infinity_norm": 5.8301609016098155e-06
+          },
+          "coefficients": [
+            0.3625519402636846,
+            -0.026753242555002388,
+            0.2639697696517428,
+            -0.017391714473029788,
+            0.048220135877089405
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.07984440472634834,
+            0.12365042783124884,
+            0.08556567586540657,
+            0.13188120337246712,
+            0.05454905844530554
+          ],
+          "interval_lower": [
+            0.20605978263300218,
+            -0.2691036277772193,
+            0.09626412664271777,
+            -0.27587412332086764,
+            -0.05869405406627993
+          ],
+          "interval_upper": [
+            0.519044097894367,
+            0.2155971426672145,
+            0.4316754126607678,
+            0.24109069437480807,
+            0.15513432582045875
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.012734721007291228,
+          "total_count": 295,
+          "replicate": 2,
+          "seed_entropy": [
+            731,
+            0
+          ],
+          "seed_spawn_key": [
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "model": "independent_nb",
+      "design": "gc",
+      "seed": 731,
+      "dimensions": {
+        "experiments": 24,
+        "voxels": 9,
+        "bases": 2,
+        "groups": 2,
+        "parameters": 5
+      },
+      "true_coefficients": [
+        0.25,
+        -0.10327240014190545,
+        0.25,
+        -0.08974496945506846,
+        0.0
+      ],
+      "null_moderator_index": 4,
+      "fixed_dispersion": 0.3,
+      "implementation": "independent_closed",
+      "status": "ok",
+      "aggregate": {
+        "attempts": 3,
+        "successful_fits": 3,
+        "successful_inferences": 3,
+        "fit_failures": 0,
+        "inference_failures_after_successful_fit": 0,
+        "total_failed_replicates": 0,
+        "bias_denominator": 3,
+        "coverage_denominator": 3,
+        "false_positive_denominator": 3,
+        "conditioning": "Bias conditional on accepted fit; coverage/FPR conditional on accepted fit and SPD observed information. Failed attempts retained in replicates.",
+        "coefficient_bias": [
+          -0.03452090794664539,
+          0.09309871675386842,
+          -0.04954566652671333,
+          0.0882227917050605,
+          0.005029644142139776
+        ],
+        "coefficient_bias_mcse": [
+          0.009759715881903528,
+          0.028650992755527464,
+          0.07651078355547698,
+          0.10095760622820707,
+          0.040682773388220815
+        ],
+        "coverage": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "coverage_mcse": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "coverage_monte_carlo_interval95": [
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ]
+        ],
+        "null_moderator_false_positive_rate": 0.0,
+        "null_moderator_false_positive_mcse": 0.0,
+        "null_moderator_false_positive_interval95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "replicates": [
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 10,
+            "function_evaluations": 12,
+            "objective": 319.17865927453016,
+            "score": [
+              -2.3166373974703447e-06,
+              2.244974850462711e-08,
+              -9.334232320412639e-07,
+              -6.138440411529444e-07,
+              6.84074317147676e-06
+            ],
+            "score_infinity_norm": 6.84074317147676e-06
+          },
+          "coefficients": [
+            0.2342737753822912,
+            -0.03795277158106749,
+            0.17899600964940676,
+            0.1938197778675067,
+            -0.04683893997853108
+          ],
+          "information_max_asymmetry": 1.1102230246251565e-16,
+          "standard_errors": [
+            0.0990953830295073,
+            0.15473680450818406,
+            0.10646866840185022,
+            0.16211293564073478,
+            0.06768292472884609
+          ],
+          "interval_lower": [
+            0.040050393610255225,
+            -0.3412313354999233,
+            -0.029678745900157344,
+            -0.12391573741639317,
+            -0.17949503481540482
+          ],
+          "interval_upper": [
+            0.4284971571543271,
+            0.26532579233778836,
+            0.38767076519897087,
+            0.5115552931514066,
+            0.08581715485834265
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.0041478589992038906,
+          "total_count": 269,
+          "replicate": 0,
+          "seed_entropy": [
+            731,
+            1
+          ],
+          "seed_spawn_key": [
+            0
+          ]
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 10,
+            "function_evaluations": 12,
+            "objective": 314.3992737489775,
+            "score": [
+              -1.6264931370635338e-06,
+              9.995887562119776e-08,
+              3.1063398875375015e-07,
+              -2.444928907663346e-07,
+              2.2131935342173392e-06
+            ],
+            "score_infinity_norm": 2.2131935342173392e-06
+          },
+          "coefficients": [
+            0.21064530943969156,
+            0.04711954548298483,
+            0.07997238589056045,
+            -0.14344759090295242,
+            -0.02332696209235549
+          ],
+          "information_max_asymmetry": 4.440892098500626e-16,
+          "standard_errors": [
+            0.10043990795366377,
+            0.15306565260245633,
+            0.10948446408749953,
+            0.17044154482312474,
+            0.0689548667697143
+          ],
+          "interval_lower": [
+            0.013786707239992452,
+            -0.25288362088794913,
+            -0.13461322058760755,
+            -0.47750688022564625,
+            -0.1584760175197533
+          ],
+          "interval_upper": [
+            0.4075039116393907,
+            0.34712271185391885,
+            0.2945579923687285,
+            0.19061169841974138,
+            0.11182209333504231
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.0544203199679032,
+          "total_count": 252,
+          "replicate": 1,
+          "seed_entropy": [
+            731,
+            1
+          ],
+          "seed_spawn_key": [
+            1
+          ]
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: NORM_OF_PROJECTED_GRADIENT_<=_PGTOL",
+            "iterations": 10,
+            "function_evaluations": 13,
+            "objective": 333.1597518938463,
+            "score": [
+              -1.4623044330974722e-08,
+              8.768714865325933e-09,
+              -2.1851359832680828e-08,
+              1.2574386420993733e-08,
+              -9.533130729266759e-09
+            ],
+            "score_infinity_norm": 2.1851359832680828e-08
+          },
+          "coefficients": [
+            0.2015181913380812,
+            -0.039687824066028415,
+            0.34239460487989276,
+            -0.054938720214578136,
+            0.0852548344973059
+          ],
+          "information_max_asymmetry": 3.3306690738754696e-16,
+          "standard_errors": [
+            0.10070357436369194,
+            0.15598249245885218,
+            0.09946440214020348,
+            0.15793071570079312,
+            0.06538740529955818
+          ],
+          "interval_lower": [
+            0.0041428124707939,
+            -0.3454078915041693,
+            0.14744795894128526,
+            -0.36447723504076707,
+            -0.042902124932351585
+          ],
+          "interval_upper": [
+            0.3988935702053685,
+            0.2660322433721124,
+            0.5373412508185003,
+            0.2545997946116108,
+            0.2134117939269634
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.004289859032724053,
+          "total_count": 282,
+          "replicate": 2,
+          "seed_entropy": [
+            731,
+            1
+          ],
+          "seed_spawn_key": [
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "model": "aggregated_nb",
+      "design": "gc",
+      "seed": 731,
+      "dimensions": {
+        "experiments": 24,
+        "voxels": 9,
+        "bases": 2,
+        "groups": 2,
+        "parameters": 5
+      },
+      "true_coefficients": [
+        0.25,
+        -0.10327240014190545,
+        0.25,
+        -0.08974496945506846,
+        0.0
+      ],
+      "null_moderator_index": 4,
+      "fixed_dispersion": 0.3,
+      "implementation": "improved",
+      "status": "ok",
+      "aggregate": {
+        "attempts": 3,
+        "successful_fits": 3,
+        "successful_inferences": 3,
+        "fit_failures": 0,
+        "inference_failures_after_successful_fit": 0,
+        "total_failed_replicates": 0,
+        "bias_denominator": 3,
+        "coverage_denominator": 3,
+        "false_positive_denominator": 3,
+        "conditioning": "Bias conditional on accepted fit; coverage/FPR conditional on accepted fit and SPD observed information. Failed attempts retained in replicates.",
+        "coefficient_bias": [
+          -0.07481884581396522,
+          0.09945993940751222,
+          -0.007408408625621615,
+          -0.011323809562491974,
+          0.00945920925943703
+        ],
+        "coefficient_bias_mcse": [
+          0.05632003517763342,
+          0.1139946973135338,
+          0.03666542894643752,
+          0.05545122560552177,
+          0.03486127689618234
+        ],
+        "coverage": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "coverage_mcse": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "coverage_monte_carlo_interval95": [
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ]
+        ],
+        "null_moderator_false_positive_rate": 0.0,
+        "null_moderator_false_positive_mcse": 0.0,
+        "null_moderator_false_positive_interval95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "replicates": [
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 14,
+            "function_evaluations": 18,
+            "objective": 48.27938028779678,
+            "score": [
+              -2.581366195819612e-05,
+              7.361267233552127e-06,
+              -1.2383528241954878e-05,
+              2.7656081740268235e-06,
+              1.974610918762898e-06
+            ],
+            "score_infinity_norm": 2.581366195819612e-05
+          },
+          "coefficients": [
+            0.16535405307069828,
+            -0.06493484710127566,
+            0.20874746581903433,
+            -0.12428957840008066,
+            0.047317310923782656
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.10500275043514705,
+            0.1577821060230856,
+            0.1498753283989108,
+            0.1644528786352682,
+            0.6785725252485041
+          ],
+          "interval_lower": [
+            -0.040447556059837436,
+            -0.37418209231140376,
+            -0.08500278001394398,
+            -0.4466112976791428,
+            -1.2826603994616819
+          ],
+          "interval_upper": [
+            0.37115566220123397,
+            0.2443123981088524,
+            0.5024977116520126,
+            0.19803214087898152,
+            1.377295021309247
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.03482669702498242,
+          "total_count": 260,
+          "replicate": 0,
+          "seed_entropy": [
+            731,
+            2
+          ],
+          "seed_spawn_key": [
+            0
+          ]
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 16,
+            "function_evaluations": 21,
+            "objective": 52.95810936745414,
+            "score": [
+              2.5102848653091314e-06,
+              -8.545914420565737e-07,
+              -1.3890888999057438e-06,
+              1.520878693428429e-06,
+              -4.434366932363343e-08
+            ],
+            "score_infinity_norm": 2.5102848653091314e-06
+          },
+          "coefficients": [
+            0.08291749470975883,
+            0.21696548633898724,
+            0.3158518509063339,
+            -0.1833738259817413,
+            -0.0601748608930747
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.34194503996009845,
+            0.16603138985595572,
+            0.6607473006543035,
+            0.15377301602913135,
+            2.2194857037139153
+          ],
+          "interval_lower": [
+            -0.5872824683041438,
+            -0.10845005808181488,
+            -0.97918906125816,
+            -0.48476339919293915,
+            -4.410286904373886
+          ],
+          "interval_upper": [
+            0.7531174577236615,
+            0.5423810307597894,
+            1.6108927630708278,
+            0.11801574722945657,
+            4.289937182587736
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.08738110802369192,
+          "total_count": 271,
+          "replicate": 1,
+          "seed_entropy": [
+            731,
+            2
+          ],
+          "seed_spawn_key": [
+            1
+          ]
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 16,
+            "function_evaluations": 18,
+            "objective": 49.34600482225437,
+            "score": [
+              -3.858295533731848e-06,
+              -2.4746848263923482e-06,
+              -1.1540921587283037e-06,
+              -4.049609239054064e-07,
+              4.128751208716145e-07
+            ],
+            "score_infinity_norm": 3.858295533731848e-06
+          },
+          "coefficients": [
+            0.2772719147776473,
+            -0.1634680214408913,
+            0.203175457397767,
+            0.004457067329140665,
+            0.04123517774760314
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.10251541200197496,
+            0.15067155659284884,
+            0.15589187824645398,
+            0.15840322723099512,
+            0.696251215075455
+          ],
+          "interval_lower": [
+            0.07634539939349116,
+            -0.45877884585746354,
+            -0.10236700944758592,
+            -0.3060075530785241,
+            -1.3233921279925396
+          ],
+          "interval_upper": [
+            0.4781984301618034,
+            0.13184280297568096,
+            0.5087179242431199,
+            0.3149216877368054,
+            1.405862483487746
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.08907305600587279,
+          "total_count": 275,
+          "replicate": 2,
+          "seed_entropy": [
+            731,
+            2
+          ],
+          "seed_spawn_key": [
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "model": "clustered_nb",
+      "design": "gc",
+      "seed": 731,
+      "dimensions": {
+        "experiments": 24,
+        "voxels": 9,
+        "bases": 2,
+        "groups": 2,
+        "parameters": 5
+      },
+      "true_coefficients": [
+        0.25,
+        -0.10327240014190545,
+        0.25,
+        -0.08974496945506846,
+        0.0
+      ],
+      "null_moderator_index": 4,
+      "fixed_dispersion": 0.3,
+      "implementation": "improved",
+      "status": "ok",
+      "aggregate": {
+        "attempts": 3,
+        "successful_fits": 3,
+        "successful_inferences": 3,
+        "fit_failures": 0,
+        "inference_failures_after_successful_fit": 0,
+        "total_failed_replicates": 0,
+        "bias_denominator": 3,
+        "coverage_denominator": 3,
+        "false_positive_denominator": 3,
+        "conditioning": "Bias conditional on accepted fit; coverage/FPR conditional on accepted fit and SPD observed information. Failed attempts retained in replicates.",
+        "coefficient_bias": [
+          -0.04734995760955263,
+          -0.021213779248789116,
+          -0.09497772596011222,
+          0.09479924880961124,
+          0.1073355735436276
+        ],
+        "coefficient_bias_mcse": [
+          0.06734604714911886,
+          0.03562298564514416,
+          0.13477290213408596,
+          0.021689301465934868,
+          0.04094618642412607
+        ],
+        "coverage": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "coverage_mcse": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "coverage_monte_carlo_interval95": [
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ],
+          [
+            0.4385029682449546,
+            1.0
+          ]
+        ],
+        "null_moderator_false_positive_rate": 0.0,
+        "null_moderator_false_positive_mcse": 0.0,
+        "null_moderator_false_positive_interval95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "replicates": [
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 8,
+            "function_evaluations": 10,
+            "objective": 184.21280681726876,
+            "score": [
+              -3.124927724584836e-06,
+              -1.5864773184048886e-06,
+              -1.6392372277351797e-06,
+              4.5859410491289054e-08,
+              -4.135337557276131e-06
+            ],
+            "score_infinity_norm": 4.135337557276131e-06
+          },
+          "coefficients": [
+            0.2547478795027729,
+            -0.18050031940680453,
+            0.21722695428742492,
+            0.009375069402056567,
+            0.15801457347046402
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.17477732481150526,
+            0.1314771287084689,
+            0.18813305650517223,
+            0.13693218049518194,
+            0.1166060312657862
+          ],
+          "interval_lower": [
+            -0.08780938244203623,
+            -0.4381907564661407,
+            -0.15150706076415157,
+            -0.2590070726930381,
+            -0.07052904819062841
+          ],
+          "interval_upper": [
+            0.5973051414475821,
+            0.07719011765253167,
+            0.5859609693390014,
+            0.2777572114971512,
+            0.3865581951315564
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.016814710979815573,
+          "total_count": 268,
+          "replicate": 0,
+          "seed_entropy": [
+            731,
+            3
+          ],
+          "seed_spawn_key": [
+            0
+          ]
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 8,
+            "function_evaluations": 10,
+            "objective": 191.0198681735335,
+            "score": [
+              -1.5138367857048252e-06,
+              2.398344855603085e-06,
+              -1.916435586224452e-06,
+              1.3019753009047008e-07,
+              7.633764056436121e-07
+            ],
+            "score_infinity_norm": 2.398344855603085e-06
+          },
+          "coefficients": [
+            0.28416892443463726,
+            -0.05835033537252799,
+            0.35105235953035857,
+            0.040274032461372435,
+            0.0262870099294026
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.17385351163472285,
+            0.12915576022655967,
+            0.1869827934400862,
+            0.12694123745467278,
+            0.11096509615889001
+          ],
+          "interval_lower": [
+            -0.05657769695523479,
+            -0.3114909738124757,
+            -0.015427181340902651,
+            -0.2085262211027332,
+            -0.1912005820830457
+          ],
+          "interval_upper": [
+            0.6249155458245093,
+            0.19479030306741973,
+            0.7175319004016198,
+            0.2890742860254781,
+            0.2437746019418509
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.06849289400270209,
+          "total_count": 293,
+          "replicate": 1,
+          "seed_entropy": [
+            731,
+            3
+          ],
+          "seed_spawn_key": [
+            1
+          ]
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "fit_success": true,
+          "inference_success": true,
+          "optimizer": {
+            "success": true,
+            "status": 0,
+            "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+            "iterations": 8,
+            "function_evaluations": 10,
+            "objective": 186.75385023449473,
+            "score": [
+              1.4306994700064024e-08,
+              3.283789307140239e-07,
+              2.577107380830057e-07,
+              8.153011599176807e-08,
+              -2.3088457723474676e-07
+            ],
+            "score_infinity_norm": 3.283789307140239e-07
+          },
+          "coefficients": [
+            0.069033323233932,
+            -0.13460788339275118,
+            -0.10321249169812016,
+            -0.03448626379980065,
+            0.13770513723101618
+          ],
+          "information_max_asymmetry": 0.0,
+          "standard_errors": [
+            0.1792143054390332,
+            0.1388856946890821,
+            0.20316284368227275,
+            0.1661162685261612,
+            0.11479663415902544
+          ],
+          "interval_lower": [
+            -0.2822202609409338,
+            -0.406818842951178,
+            -0.5014043483121156,
+            -0.3600681673572611,
+            -0.0872921312670942
+          ],
+          "interval_upper": [
+            0.4202869074087978,
+            0.1376030761656756,
+            0.2949793649158753,
+            0.29109563975765984,
+            0.3627024057291266
+          ],
+          "covered": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "null_moderator_rejected": false,
+          "seconds": 0.01912125200033188,
+          "total_count": 212,
+          "replicate": 2,
+          "seed_entropy": [
+            731,
+            3
+          ],
+          "seed_spawn_key": [
+            2
+          ]
+        }
+      ]
+    }
+  ]
+}

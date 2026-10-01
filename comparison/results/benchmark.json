@@ -1,0 +1,612 @@
+{
+  "schema_version": 1,
+  "kind": "performance_benchmark",
+  "measurement": {
+    "isolation": "One operation per sequential fresh subprocess; reference in separate child.",
+    "timing": "Cold kernel after imports and case/model setup; no warmup.",
+    "memory": "Absolute ru_maxrss high-water RSS includes interpreter, imports and setup. Import/setup marks are separate high-water marks, NOT incremental operation memory.",
+    "rss_conversion": "Linux ru_maxrss KiB / 1024; macOS bytes / 1048576.",
+    "guard": "Whitelist, P<=64, estimated design/tangent bytes, per-child timeout; estimate is not a bound on interpreter/runtime RSS; no RLIMIT_AS.",
+    "contrast_covariance": "Same 2-row C: group intercept difference and global moderator. Original: assemble H, full fisher_covariance, C V C.T; improved: assemble information_operator, projected solves.",
+    "reference": "Unsimplified float64 autodiff observed Hessian; solve for covariance.",
+    "autodiff": "torch.autograd.functional.hessian; reverse-mode row-wise Hessian, no separate score calculation.",
+    "independent_closed": "Optional helper evaluate() computes value, score and Hessian together.",
+    "inference": "Performance or matching Hessians does not establish statistical calibration."
+  },
+  "metadata": {
+    "versions": {
+      "numpy": "1.24.4",
+      "scipy": "1.11.2",
+      "torch": "2.0.1+cu117",
+      "python": "3.11.14"
+    },
+    "platform": "Linux-4.18.0-553.159.1.el8_10.x86_64-x86_64-with-glibc2.28",
+    "threads": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "torch_threads": 1,
+    "torch_interop_threads": 1,
+    "source_hashes": {
+      "cbmr_code/__init__.py": "bd11ff71c88a836082a5fd4e5c8b0a0315da49230ee72acb22f07b7d508e6e8d",
+      "cbmr_code/_helpers.py": "a8e1d7a85a7aa3754d3016b033398886bc1745c360e8adddf3ea198a9686b683",
+      "cbmr_code/_torch.py": "e6737ba742060592280bb53d0b64aaaf52fcbf14a158f44df63093d3792e1871",
+      "cbmr_code/basis.py": "e77568120adc08d8b2a3421a39d3595e4d6beb62402252be0e4e95cdfff88a8a",
+      "cbmr_code/contrasts.py": "f37984e24e92f3581b8170ef114c242d1dd84a13a1a67fabf5a467b83009fce5",
+      "cbmr_code/covariance.py": "880dca596220ede9a7dc8148c538e55f787be0a9b2b7a7254bf8329b61419038",
+      "cbmr_code/distributions.py": "4d24990daea729d1b41f0e83d46284eb6b54dbd4e91c5d4132d9a39ef9b7cfe1",
+      "cbmr_code/estimator.py": "2196bf40b1fbe8e3fee914ce5598c9e6096723849c3e6ec019b4673c210233cf",
+      "cbmr_code/information.py": "ca04319659a8cc45ff140b40719821d006198c228054d94b826fb64b915cb5ff",
+      "cbmr_code/model.py": "6ead23af283beb0fbb6d60c2e99c155915fa2fa740e3097ea1bb19680ce4a6ec",
+      "cbmr_code/predictor.py": "eee4e96794e9645dd207190ae3cc63558db2414c98deb5b81eb968922e6a1692",
+      "cbmr_code/results.py": "7c780fadd22f9073be14d86f3a20e04cd8eeb0a960cc5617f9208efa2bc52bfa",
+      "cbmr_code/terms.py": "c12ff42543a31011efaa7f9307ad01dce7a3907fc77d361b35b903c3a2a72db2",
+      "cbmr_improved/__init__.py": "2b5310cd0f6b76186ffa8cf93439ae0090114a887a4913fb9217af19d4c9ff5b",
+      "cbmr_improved/_helpers.py": "a8e1d7a85a7aa3754d3016b033398886bc1745c360e8adddf3ea198a9686b683",
+      "cbmr_improved/_torch.py": "e6737ba742060592280bb53d0b64aaaf52fcbf14a158f44df63093d3792e1871",
+      "cbmr_improved/basis.py": "e77568120adc08d8b2a3421a39d3595e4d6beb62402252be0e4e95cdfff88a8a",
+      "cbmr_improved/contrasts.py": "f49555fb52f78d521d1435669f203f66d6b9c507927465bdf2bbb4baf39a2a53",
+      "cbmr_improved/covariance.py": "f095f8f869859cf8ad2a74011588b4cbb1895ab5121f24e8f0c8fb5804b92631",
+      "cbmr_improved/distributions.py": "33b4ec8c0e9ec8f1da1f39e2d55a5c99f5d54119e6538d973486a1ef387c48f7",
+      "cbmr_improved/estimator.py": "545c3ace7d0c33fdcaa17e247565ece2fa9872ccefa079786b568de3457cb9bd",
+      "cbmr_improved/information.py": "ebd143fd2054f9771cb218de99a817f54a856da3e7553683dec0f3bdf39bff0e",
+      "cbmr_improved/model.py": "4d9cea530150ee3a2765f4ba9270fce83acda67f115400ea593ba09829a1e48a",
+      "cbmr_improved/predictor.py": "e10102f7ff0ff66f52eead687cc7a4e9afbfdbd360ab1c02e3107b35baaf8f27",
+      "cbmr_improved/results.py": "b6f58087407e61e4f7b5e95d4bb5cdb174e9b26113f99f28043afa6055797174",
+      "cbmr_improved/structured.py": "069541f08b2d693a304f933933f5b422fc090747b86cd575bb281c3164485c18",
+      "cbmr_improved/terms.py": "c12ff42543a31011efaa7f9307ad01dce7a3907fc77d361b35b903c3a2a72db2"
+    }
+  },
+  "records": [
+    {
+      "size": "tiny",
+      "model": "poisson",
+      "design": "gc",
+      "workload": "hessian",
+      "seed": 731,
+      "threads": 1,
+      "implementation": "original",
+      "dimensions": {
+        "experiments": 16,
+        "voxels": 7,
+        "bases": 2,
+        "groups": 2,
+        "parameters": 5
+      },
+      "estimated_problem_bytes": 40032,
+      "status": "ok",
+      "repeats": 2,
+      "successful_repeats": 2,
+      "runs": [
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.056255798030178994,
+          "peak_rss_mib": 261.81640625,
+          "import_seconds": 43.01317003200529,
+          "import_peak_rss_mib": 258.14453125,
+          "setup_peak_rss_mib": 259.33203125,
+          "numerical_error": {
+            "max_absolute": 2.842170943040401e-14,
+            "relative_frobenius": 1.2936873976714004e-16,
+            "within_tolerance": true
+          },
+          "repeat": 0
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.10068868001690134,
+          "peak_rss_mib": 259.52734375,
+          "import_seconds": 46.08685639197938,
+          "import_peak_rss_mib": 257.84375,
+          "setup_peak_rss_mib": 259.03125,
+          "numerical_error": {
+            "max_absolute": 2.842170943040401e-14,
+            "relative_frobenius": 1.2936873976714004e-16,
+            "within_tolerance": true
+          },
+          "repeat": 1
+        }
+      ],
+      "seconds": {
+        "median": 0.07847223902354017,
+        "min": 0.056255798030178994,
+        "all": [
+          0.056255798030178994,
+          0.10068868001690134
+        ]
+      },
+      "peak_rss_mib": {
+        "median": 260.671875,
+        "min": 259.52734375,
+        "all": [
+          261.81640625,
+          259.52734375
+        ]
+      },
+      "import_seconds": {
+        "median": 44.550013211992336,
+        "min": 43.01317003200529,
+        "all": [
+          43.01317003200529,
+          46.08685639197938
+        ]
+      },
+      "import_peak_rss_mib": {
+        "median": 257.994140625,
+        "min": 257.84375,
+        "all": [
+          258.14453125,
+          257.84375
+        ]
+      },
+      "numerical_error": {
+        "max_absolute": 2.842170943040401e-14,
+        "relative_frobenius": 1.2936873976714004e-16
+      },
+      "reference_status": "ok",
+      "reference_errors": [],
+      "errors": []
+    },
+    {
+      "size": "tiny",
+      "model": "poisson",
+      "design": "gc",
+      "workload": "hessian",
+      "seed": 731,
+      "threads": 1,
+      "implementation": "improved",
+      "dimensions": {
+        "experiments": 16,
+        "voxels": 7,
+        "bases": 2,
+        "groups": 2,
+        "parameters": 5
+      },
+      "estimated_problem_bytes": 40032,
+      "status": "ok",
+      "repeats": 2,
+      "successful_repeats": 2,
+      "runs": [
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.04034351295558736,
+          "peak_rss_mib": 258.99609375,
+          "import_seconds": 47.025094326003455,
+          "import_peak_rss_mib": 257.09375,
+          "setup_peak_rss_mib": 258.26953125,
+          "numerical_error": {
+            "max_absolute": 2.842170943040401e-14,
+            "relative_frobenius": 1.2936873976714004e-16,
+            "within_tolerance": true
+          },
+          "repeat": 0
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.08637794596143067,
+          "peak_rss_mib": 258.359375,
+          "import_seconds": 44.75820564903552,
+          "import_peak_rss_mib": 256.48046875,
+          "setup_peak_rss_mib": 257.6484375,
+          "numerical_error": {
+            "max_absolute": 2.842170943040401e-14,
+            "relative_frobenius": 1.2936873976714004e-16,
+            "within_tolerance": true
+          },
+          "repeat": 1
+        }
+      ],
+      "seconds": {
+        "median": 0.06336072945850901,
+        "min": 0.04034351295558736,
+        "all": [
+          0.04034351295558736,
+          0.08637794596143067
+        ]
+      },
+      "peak_rss_mib": {
+        "median": 258.677734375,
+        "min": 258.359375,
+        "all": [
+          258.99609375,
+          258.359375
+        ]
+      },
+      "import_seconds": {
+        "median": 45.891649987519486,
+        "min": 44.75820564903552,
+        "all": [
+          47.025094326003455,
+          44.75820564903552
+        ]
+      },
+      "import_peak_rss_mib": {
+        "median": 256.787109375,
+        "min": 256.48046875,
+        "all": [
+          257.09375,
+          256.48046875
+        ]
+      },
+      "numerical_error": {
+        "max_absolute": 2.842170943040401e-14,
+        "relative_frobenius": 1.2936873976714004e-16
+      },
+      "reference_status": "ok",
+      "reference_errors": [],
+      "errors": []
+    },
+    {
+      "size": "tiny",
+      "model": "poisson",
+      "design": "gc",
+      "workload": "hessian",
+      "seed": 731,
+      "threads": 1,
+      "implementation": "unsimplified_autodiff",
+      "dimensions": {
+        "experiments": 16,
+        "voxels": 7,
+        "bases": 2,
+        "groups": 2,
+        "parameters": 5
+      },
+      "estimated_problem_bytes": 40032,
+      "status": "ok",
+      "repeats": 2,
+      "successful_repeats": 2,
+      "runs": [
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.29158868599915877,
+          "peak_rss_mib": 250.984375,
+          "import_seconds": 41.08768366702134,
+          "import_peak_rss_mib": 248.2578125,
+          "setup_peak_rss_mib": 248.7265625,
+          "numerical_error": {
+            "max_absolute": 0.0,
+            "relative_frobenius": 0.0,
+            "within_tolerance": true
+          },
+          "repeat": 0
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.2195408180123195,
+          "peak_rss_mib": 251.65234375,
+          "import_seconds": 39.71287344000302,
+          "import_peak_rss_mib": 248.84375,
+          "setup_peak_rss_mib": 249.3203125,
+          "numerical_error": {
+            "max_absolute": 0.0,
+            "relative_frobenius": 0.0,
+            "within_tolerance": true
+          },
+          "repeat": 1
+        }
+      ],
+      "seconds": {
+        "median": 0.25556475200573914,
+        "min": 0.2195408180123195,
+        "all": [
+          0.29158868599915877,
+          0.2195408180123195
+        ]
+      },
+      "peak_rss_mib": {
+        "median": 251.318359375,
+        "min": 250.984375,
+        "all": [
+          250.984375,
+          251.65234375
+        ]
+      },
+      "import_seconds": {
+        "median": 40.40027855351218,
+        "min": 39.71287344000302,
+        "all": [
+          41.08768366702134,
+          39.71287344000302
+        ]
+      },
+      "import_peak_rss_mib": {
+        "median": 248.55078125,
+        "min": 248.2578125,
+        "all": [
+          248.2578125,
+          248.84375
+        ]
+      },
+      "numerical_error": {
+        "max_absolute": 0.0,
+        "relative_frobenius": 0.0
+      },
+      "reference_status": "ok",
+      "reference_errors": [],
+      "errors": []
+    },
+    {
+      "size": "small",
+      "model": "poisson",
+      "design": "gc",
+      "workload": "hessian",
+      "seed": 731,
+      "threads": 1,
+      "implementation": "original",
+      "dimensions": {
+        "experiments": 32,
+        "voxels": 32,
+        "bases": 4,
+        "groups": 3,
+        "parameters": 13
+      },
+      "estimated_problem_bytes": 753504,
+      "status": "ok",
+      "repeats": 2,
+      "successful_repeats": 2,
+      "runs": [
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.08881173899862915,
+          "peak_rss_mib": 260.703125,
+          "import_seconds": 46.69992555503268,
+          "import_peak_rss_mib": 259.0625,
+          "setup_peak_rss_mib": 260.21875,
+          "numerical_error": {
+            "max_absolute": 5.684341886080802e-14,
+            "relative_frobenius": 4.9235345731442025e-17,
+            "within_tolerance": true
+          },
+          "repeat": 0
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.07306011294713244,
+          "peak_rss_mib": 259.79296875,
+          "import_seconds": 42.158719735976774,
+          "import_peak_rss_mib": 258.15625,
+          "setup_peak_rss_mib": 259.30859375,
+          "numerical_error": {
+            "max_absolute": 5.684341886080802e-14,
+            "relative_frobenius": 4.9235345731442025e-17,
+            "within_tolerance": true
+          },
+          "repeat": 1
+        }
+      ],
+      "seconds": {
+        "median": 0.0809359259728808,
+        "min": 0.07306011294713244,
+        "all": [
+          0.08881173899862915,
+          0.07306011294713244
+        ]
+      },
+      "peak_rss_mib": {
+        "median": 260.248046875,
+        "min": 259.79296875,
+        "all": [
+          260.703125,
+          259.79296875
+        ]
+      },
+      "import_seconds": {
+        "median": 44.429322645504726,
+        "min": 42.158719735976774,
+        "all": [
+          46.69992555503268,
+          42.158719735976774
+        ]
+      },
+      "import_peak_rss_mib": {
+        "median": 258.609375,
+        "min": 258.15625,
+        "all": [
+          259.0625,
+          258.15625
+        ]
+      },
+      "numerical_error": {
+        "max_absolute": 5.684341886080802e-14,
+        "relative_frobenius": 4.9235345731442025e-17
+      },
+      "reference_status": "ok",
+      "reference_errors": [],
+      "errors": []
+    },
+    {
+      "size": "small",
+      "model": "poisson",
+      "design": "gc",
+      "workload": "hessian",
+      "seed": 731,
+      "threads": 1,
+      "implementation": "improved",
+      "dimensions": {
+        "experiments": 32,
+        "voxels": 32,
+        "bases": 4,
+        "groups": 3,
+        "parameters": 13
+      },
+      "estimated_problem_bytes": 753504,
+      "status": "ok",
+      "repeats": 2,
+      "successful_repeats": 2,
+      "runs": [
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.012777604977600276,
+          "peak_rss_mib": 260.05078125,
+          "import_seconds": 48.215505968022626,
+          "import_peak_rss_mib": 258.21484375,
+          "setup_peak_rss_mib": 259.34765625,
+          "numerical_error": {
+            "max_absolute": 5.684341886080802e-14,
+            "relative_frobenius": 4.9235345731442025e-17,
+            "within_tolerance": true
+          },
+          "repeat": 0
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.030408205988351256,
+          "peak_rss_mib": 258.76953125,
+          "import_seconds": 53.60708349000197,
+          "import_peak_rss_mib": 256.88671875,
+          "setup_peak_rss_mib": 258.05078125,
+          "numerical_error": {
+            "max_absolute": 5.684341886080802e-14,
+            "relative_frobenius": 4.9235345731442025e-17,
+            "within_tolerance": true
+          },
+          "repeat": 1
+        }
+      ],
+      "seconds": {
+        "median": 0.021592905482975766,
+        "min": 0.012777604977600276,
+        "all": [
+          0.012777604977600276,
+          0.030408205988351256
+        ]
+      },
+      "peak_rss_mib": {
+        "median": 259.41015625,
+        "min": 258.76953125,
+        "all": [
+          260.05078125,
+          258.76953125
+        ]
+      },
+      "import_seconds": {
+        "median": 50.9112947290123,
+        "min": 48.215505968022626,
+        "all": [
+          48.215505968022626,
+          53.60708349000197
+        ]
+      },
+      "import_peak_rss_mib": {
+        "median": 257.55078125,
+        "min": 256.88671875,
+        "all": [
+          258.21484375,
+          256.88671875
+        ]
+      },
+      "numerical_error": {
+        "max_absolute": 5.684341886080802e-14,
+        "relative_frobenius": 4.9235345731442025e-17
+      },
+      "reference_status": "ok",
+      "reference_errors": [],
+      "errors": []
+    },
+    {
+      "size": "small",
+      "model": "poisson",
+      "design": "gc",
+      "workload": "hessian",
+      "seed": 731,
+      "threads": 1,
+      "implementation": "unsimplified_autodiff",
+      "dimensions": {
+        "experiments": 32,
+        "voxels": 32,
+        "bases": 4,
+        "groups": 3,
+        "parameters": 13
+      },
+      "estimated_problem_bytes": 753504,
+      "status": "ok",
+      "repeats": 2,
+      "successful_repeats": 2,
+      "runs": [
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.3206164260045625,
+          "peak_rss_mib": 252.9921875,
+          "import_seconds": 38.746613924973644,
+          "import_peak_rss_mib": 250.22265625,
+          "setup_peak_rss_mib": 250.71875,
+          "numerical_error": {
+            "max_absolute": 0.0,
+            "relative_frobenius": 0.0,
+            "within_tolerance": true
+          },
+          "repeat": 0
+        },
+        {
+          "status": "ok",
+          "errors": [],
+          "seconds": 0.11644832097226754,
+          "peak_rss_mib": 250.3046875,
+          "import_seconds": 40.40361102396855,
+          "import_peak_rss_mib": 250.3046875,
+          "setup_peak_rss_mib": 250.3046875,
+          "numerical_error": {
+            "max_absolute": 0.0,
+            "relative_frobenius": 0.0,
+            "within_tolerance": true
+          },
+          "repeat": 1
+        }
+      ],
+      "seconds": {
+        "median": 0.21853237348841503,
+        "min": 0.11644832097226754,
+        "all": [
+          0.3206164260045625,
+          0.11644832097226754
+        ]
+      },
+      "peak_rss_mib": {
+        "median": 251.6484375,
+        "min": 250.3046875,
+        "all": [
+          252.9921875,
+          250.3046875
+        ]
+      },
+      "import_seconds": {
+        "median": 39.5751124744711,
+        "min": 38.746613924973644,
+        "all": [
+          38.746613924973644,
+          40.40361102396855
+        ]
+      },
+      "import_peak_rss_mib": {
+        "median": 250.263671875,
+        "min": 250.22265625,
+        "all": [
+          250.22265625,
+          250.3046875
+        ]
+      },
+      "numerical_error": {
+        "max_absolute": 0.0,
+        "relative_frobenius": 0.0
+      },
+      "reference_status": "ok",
+      "reference_errors": [],
+      "errors": []
+    }
+  ],
+  "status": "ok"
+}
